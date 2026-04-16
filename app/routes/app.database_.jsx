@@ -133,80 +133,82 @@ export default function Database() {
                 </s-stack>
 
                 <s-stack paddingBlockStart="large">
-                    <s-table>
-                        <s-table-header-row>
-                            <s-table-header>
-                                <s-grid gridTemplateColumns="30px 1fr">
-                                    <div></div>
-                                    <s-checkbox />
-                                </s-grid>
-                            </s-table-header>
-                            <s-table-header>
-                                Brand
-                            </s-table-header>
-                            <s-table-header>
-                                Model
-                            </s-table-header>
-                            <s-table-header>
-                                Year
-                            </s-table-header>
-                            <s-table-header>
-                                Type
-                            </s-table-header>
-                            <s-table-header>
-                                Attachment
-                            </s-table-header>
-                            <s-table-header>
-                                <s-stack alignItems="end">
-                                    <s-icon type="menu" />
-                                </s-stack>
-                            </s-table-header>
-                        </s-table-header-row>
-
-                        <s-table-body>
-                            <s-table-row>
-                                <s-table-cell>
-                                    <s-grid gridTemplateColumns="30px 1fr">
-                                        <div style={{ padding: "0 5px" }}>1</div>
+                    <s-stack borderRadius="base" overflow="hidden" border="base">
+                        <s-table>
+                            <s-table-header-row>
+                                <s-table-header>
+                                    <s-grid gridTemplateColumns="30px 1fr" alignItems="center">
+                                        <div style={{ height: "25px" }}></div>
                                         <s-checkbox />
                                     </s-grid>
-                                </s-table-cell>
-                                <s-table-cell>
-                                    Toyota
-                                </s-table-cell>
-                                <s-table-cell>
-                                    FJ Cruiser
-                                </s-table-cell>
-                                <s-table-cell>
-                                    FJ Cruiser
-                                </s-table-cell>
-                                <s-table-cell>
-                                    2010-2014
-                                </s-table-cell>
-                                <s-table-cell>
-                                    <s-clickable href="#">
-                                        <div style={{ display: "flex", alignItems: "center", color: "#0094d5", gap: "4px" }}>
-                                            <s-icon type="product" tone="info" />
-                                            1 product
-                                        </div>
-                                    </s-clickable>
-                                </s-table-cell>
-                                <s-table-cell>
+                                </s-table-header>
+                                <s-table-header>
+                                    Brand
+                                </s-table-header>
+                                <s-table-header>
+                                    Model
+                                </s-table-header>
+                                <s-table-header>
+                                    Year
+                                </s-table-header>
+                                <s-table-header>
+                                    Type
+                                </s-table-header>
+                                <s-table-header>
+                                    Attachment
+                                </s-table-header>
+                                <s-table-header>
                                     <s-stack alignItems="end">
-                                        <s-button commandFor="customer-menu" icon="menu-vertical" variant="tertiary"></s-button>
-
-                                        <s-menu id="customer-menu" accessibilityLabel="Customer actions">
-                                            <s-section heading="Actions">
-                                                <s-button icon="edit">Edit row</s-button>
-                                                <s-button icon="duplicate">Duplicate row</s-button>
-                                            </s-section>
-                                            <s-button tone="critical" icon="delete">Delete customer</s-button>
-                                        </s-menu>
+                                        <s-icon type="menu" />
                                     </s-stack>
-                                </s-table-cell>
-                            </s-table-row>
-                        </s-table-body>
-                    </s-table>
+                                </s-table-header>
+                            </s-table-header-row>
+
+                            <s-table-body>
+                                <s-table-row>
+                                    <s-table-cell>
+                                        <s-grid gridTemplateColumns="30px 1fr">
+                                            <div style={{ padding: "0 5px" }}>1</div>
+                                            <s-checkbox />
+                                        </s-grid>
+                                    </s-table-cell>
+                                    <s-table-cell>
+                                        Toyota
+                                    </s-table-cell>
+                                    <s-table-cell>
+                                        FJ Cruiser
+                                    </s-table-cell>
+                                    <s-table-cell>
+                                        FJ Cruiser
+                                    </s-table-cell>
+                                    <s-table-cell>
+                                        2010-2014
+                                    </s-table-cell>
+                                    <s-table-cell>
+                                        <s-clickable href="#">
+                                            <div style={{ display: "flex", alignItems: "center", color: "#0094d5", gap: "4px" }}>
+                                                <s-icon type="product" tone="info" />
+                                                1 product
+                                            </div>
+                                        </s-clickable>
+                                    </s-table-cell>
+                                    <s-table-cell>
+                                        <s-stack alignItems="end">
+                                            <s-button commandFor="customer-menu" icon="menu-vertical" variant="tertiary"></s-button>
+
+                                            <s-menu id="customer-menu" accessibilityLabel="Customer actions">
+                                                <s-section heading="Actions">
+                                                    <s-button icon="edit">Edit row</s-button>
+                                                    <s-button icon="duplicate">Duplicate row</s-button>
+                                                </s-section>
+                                                <s-button tone="critical" icon="delete">Delete customer</s-button>
+                                            </s-menu>
+                                        </s-stack>
+                                    </s-table-cell>
+                                </s-table-row>
+                            </s-table-body>
+                        </s-table>
+                    </s-stack>
                 </s-stack>
             </s-stack>
         </s-page>
