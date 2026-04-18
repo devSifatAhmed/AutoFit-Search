@@ -1,0 +1,30 @@
+
+<script>
+    document.addEventListener("DOMContentLoaded", ()=>{
+        const windowData = window.autoFitConfig ? window.autoFitConfig : null;
+        if(windowData !== null){
+            console.log("AutoFit Search app embeded...");
+            console.log("AutoFit Search config data: ", windowData);
+        }else{
+            console.log("AutoFit Search app not embeded yet...");
+        }
+    });
+</script>
+
+{% schema %}
+{
+    "name": "Search widget",
+    "target": "section",
+    "settings": [
+        {
+            "type": "header",
+            "content": "General"
+        },
+        {
+            "type": "text",
+            "id": "text",
+            "label": "Text field"
+        }
+    ]
+}
+{% endschema %}
