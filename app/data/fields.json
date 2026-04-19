@@ -1,0 +1,30 @@
+[
+    {
+        "id": "brand__c1a2b3d4e5f6g7h8i9j0",
+        "type": "select",
+        "visibility": "visible",
+        "sortby": "a-z",
+        "label": "Brand",
+        "placeholder": "Select Brand"
+    },
+    {
+        "id": "model__c1a2b3d4e5f6g7h8i9j0",
+        "type": "select",
+        "visibility": "visible",
+        "sortby": "a-z",
+        "label": "Model",
+        "placeholder": "Select Model"
+    },
+    {
+        "id": "year__c1a2b3d4e5f6g7h8i9j0",
+        "type": "range",
+        "visibility": "visible",
+        "sortby": "a-z",
+        "label": "Year",
+        "placeholder": "Select Year",
+        "values": {
+            "start": 1970,
+            "end": 2026
+        }
+    }
+]

@@ -1,9 +1,25 @@
-import { useNavigation } from "react-router"
+import { useLoaderData, useNavigation } from "react-router"
 import Loader from '../components/essentials/Loader'
 import Text from '../components/essentials/Text'
 import Section from '../components/essentials/Section'
 import { useEffect, useState } from "react";
+import { getFields } from "../utils/fields.server";
+import { authenticate } from "../shopify.server";
+import { capitalizeFirstLetter } from "../func/capitalizeFirstLetter";
+
+// import page compononents start
+import FieldModal from "../components/pages/database/home/FieldModal";
+// import page compononents end
+
+export async function loader({request}) {
+    const { admin } = await authenticate.admin(request);
+    const fields = await getFields(admin);
+    console.log("Fields from loader:", fields);
+    return { fields };
+}
+
 export default function Database() {
+    const { fields: loadedFields } = useLoaderData();
     const navigation = useNavigation();
     const isLoading = navigation.state === "loading";
     if (isLoading) {
@@ -11,6 +27,7 @@ export default function Database() {
             <Loader />
         )
     }
+    const [fields, setFields] = useState(loadedFields);
     return (
         <s-page>
             <s-stack paddingBlock='small large'>
@@ -58,59 +75,31 @@ export default function Database() {
                                         </s-table-header>
                                     </s-table-header-row>
                                     <s-table-body>
-                                        <s-table-row>
-                                            <s-table-cell>
-                                                <s-stack direction="inline" gap="small" alignItems="center">
-                                                    <s-button variant="tertiary" icon="drag-handle" />
-                                                    Brand
-                                                </s-stack>
-                                            </s-table-cell>
-                                            <s-table-cell>
-                                                Select
-                                            </s-table-cell>
-                                            <s-table-cell>
-                                                <s-stack direction="inline" justifyContent="end">
-                                                    <s-button variant="tertiary" icon="edit" />
-                                                    <s-button variant="tertiary" icon="delete" tone="critical" />
-                                                </s-stack>
-                                            </s-table-cell>
-                                        </s-table-row>
-                                        <s-table-row>
-                                            <s-table-cell>
-                                                <s-stack direction="inline" gap="small" alignItems="center">
-                                                    <s-button variant="tertiary" icon="drag-handle" />
-                                                    Model
-                                                </s-stack>
-                                            </s-table-cell>
-                                            <s-table-cell>
-                                                Select
-                                            </s-table-cell>
-                                            <s-table-cell>
-                                                <s-stack direction="inline" justifyContent="end">
-                                                    <s-button variant="tertiary" icon="edit" />
-                                                    <s-button variant="tertiary" icon="delete" tone="critical" />
-                                                </s-stack>
-                                            </s-table-cell>
-                                        </s-table-row>
-                                        <s-table-row>
-                                            <s-table-cell>
-                                                <s-stack direction="inline" gap="small" alignItems="center">
-                                                    <s-button variant="tertiary" icon="drag-handle" />
-                                                    Year
-                                                </s-stack>
-                                            </s-table-cell>
-                                            <s-table-cell>
-                                                Select
-                                            </s-table-cell>
-                                            <s-table-cell>
-                                                <s-stack direction="inline" justifyContent="end">
-                                                    <s-button variant="tertiary" icon="edit" />
-                                                    <s-button variant="tertiary" icon="delete" tone="critical" />
-                                                </s-stack>
-                                            </s-table-cell>
-                                        </s-table-row>
+                                        {fields.map((field, index) => (
+                                            <s-table-row key={index}>
+                                                <s-table-cell>
+                                                    <s-stack direction="inline" gap="small" alignItems="center">
+                                                        <s-button variant="tertiary" icon="drag-handle" />
+                                                        {field.label}
+                                                    </s-stack>
+                                                </s-table-cell>
+                                                <s-table-cell>
+                                                    {capitalizeFirstLetter(field.type)}
+                                                </s-table-cell>
+                                                <s-table-cell>
+                                                    <s-stack direction="inline" justifyContent="end">
+                                                        <s-button variant="tertiary" icon="edit" />
+                                                        <s-button variant="tertiary" icon="delete" tone="critical" />
+                                                    </s-stack>
+                                                </s-table-cell>
+                                            </s-table-row>
+                                        ))}
                                     </s-table-body>
                                 </s-table>
+                                <s-stack padding="none base base">
+                                    <s-button variant="ghost" icon="plus" commandFor="field-modal">Add new field</s-button>
+                                    <FieldModal/>
+                                </s-stack>
                             </Section>
                         </s-stack>
                     </s-grid-item>
@@ -152,9 +141,6 @@ export default function Database() {
                                     Year
                                 </s-table-header>
                                 <s-table-header>
-                                    Type
-                                </s-table-header>
-                                <s-table-header>
                                     Attachment
                                 </s-table-header>
                                 <s-table-header>
@@ -174,9 +160,6 @@ export default function Database() {
                                     </s-table-cell>
                                     <s-table-cell>
                                         Toyota
-                                    </s-table-cell>
-                                    <s-table-cell>
-                                        FJ Cruiser
                                     </s-table-cell>
                                     <s-table-cell>
                                         FJ Cruiser
