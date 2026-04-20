@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "6dd7abcaa1b0973a37b5a520c6885e1c"
+client_id = "dde92f87ab20e1524115265494317d79"
 name = "AutoFit Search"
 application_url = "https://example.com"
 embedded = true

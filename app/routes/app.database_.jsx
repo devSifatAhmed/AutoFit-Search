@@ -1,4 +1,4 @@
-import { useLoaderData, useNavigation } from "react-router"
+import { useLoaderData, useNavigation} from "react-router"
 import Loader from '../components/essentials/Loader'
 import Text from '../components/essentials/Text'
 import Section from '../components/essentials/Section'
@@ -14,7 +14,6 @@ import FieldModal from "../components/pages/database/home/FieldModal";
 export async function loader({request}) {
     const { admin } = await authenticate.admin(request);
     const fields = await getFields(admin);
-    console.log("Fields from loader:", fields);
     return { fields };
 }
 
@@ -28,6 +27,9 @@ export default function Database() {
         )
     }
     const [fields, setFields] = useState(loadedFields);
+    const handleFieldModal = ({type, field}) => {
+        // type can be "add" or "edit"
+    }
     return (
         <s-page>
             <s-stack paddingBlock='small large'>
@@ -97,7 +99,7 @@ export default function Database() {
                                     </s-table-body>
                                 </s-table>
                                 <s-stack padding="none base base">
-                                    <s-button variant="ghost" icon="plus" commandFor="field-modal">Add new field</s-button>
+                                    <s-button variant="ghost" icon="plus" commandFor="field-modal" onClick={() => {handleFieldModal({type: "add"})}}>Add new field</s-button>
                                     <FieldModal/>
                                 </s-stack>
                             </Section>
