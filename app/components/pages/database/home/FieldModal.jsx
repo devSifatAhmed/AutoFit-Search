@@ -1,28 +1,56 @@
-import { useState } from "react";
-
+import { useEffect, useState } from "react";
+import { Select, Range } from "../../../../func/fields";
 export default function FieldModal({
-    handleCancel,
-    handleSave,
     type,
-    data
+    data,
+    handleUpdate
 }) {
-    const [saveProcess, setSaveProcess] = useState(false);
+    const [fieldType, setFieldType] = useState(null);
+    const [field, setField] = useState(null);
+    const [saveProgress, setSaveProgress] = useState(false);
     const modalSave = () => {
-        setSaveProcess(true);
+        setSaveProgress(true);
         setTimeout(() => {
-            setSaveProcess(false);
+            setSaveProgress(false);
         }, 10000);
-        // handleSave();
     }
+    useEffect(() => {
+        if (type === "add") {
+            setFieldType("select");
+            setField(Select);
+        } else if (type === "edit") {
+            setFieldType(data.type);
+            setField(data);
+        }
+    }, [type, data]);
+    useEffect(() => {
+        setTimeout(() => {
+            console.clear();
+            console.log("field type", fieldType);
+            console.log("field data", field);
+        }, 1000);
+    }, [fieldType, field]);
+    const handleFieldChange = (e) => {
+        setFieldType(e.target.value);
+        if (e.target.value === "select") {
+            setField(Select);
+        } else if (e.target.value === "range") {
+            setField(Range);
+        }
+    }
+
+    // working on field options state management and handlers, will add soon
     return (
-        <s-modal id="field-modal" heading="Add new field" open={false} onClose={handleCancel}>
+        <s-modal id="field-modal" heading={type === "add" ? "Add new field" : "Edit field"}>
             <s-stack gap="large">
                 <s-select
                     label="Column type"
                     // details="You can’t add more range fields"
+                    onChange={handleFieldChange}
+                    disabled={type === "edit"}
                 >
-                    <s-option value="select">Select</s-option>
-                    <s-option value="range">Range</s-option>
+                    <s-option value="select" selected={fieldType === "select"}>Select</s-option>
+                    <s-option value="range" selected={fieldType === "range"}>Range</s-option>
                 </s-select>
                 <s-grid gridTemplateColumns="2fr 1fr" gap="base" alignItems="center">
                     <s-select
@@ -49,7 +77,7 @@ export default function FieldModal({
                     />
                 </s-grid>
             </s-stack>
-            {saveProcess ? (
+            {saveProgress ? (
                 <>
                     <style>{`
                         .modal__overlay {
@@ -102,17 +130,23 @@ export default function FieldModal({
                     </div>
                 </>
             ) : null}
-            <s-button slot="secondary-actions" commandFor="field-modal" command="--hide">
-                Close
+            <s-button slot="secondary-actions" commandFor="field-modal" command="--hide" disabled={saveProgress}>
+                Cancel
             </s-button>
             <s-button
                 slot="primary-action"
                 variant="primary"
-                // commandFor="field-modal"
-                // command="--hide"
                 onClick={modalSave}
             >
-                Save
+                {type === "add" ? (
+                    <>
+                        {saveProgress ? "Saving" : "Add field"}
+                    </>
+                ) : (
+                    <>
+                        {saveProgress ? "Updating" : "Save changes"}
+                    </>
+                )}
             </s-button>
         </s-modal>
     )

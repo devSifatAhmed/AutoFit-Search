@@ -27,11 +27,40 @@ export default function Database() {
         )
     }
     const [fields, setFields] = useState(loadedFields);
+    const [fieldModalOpenType, setFieldModalOpenType] = useState(null);
+    const [editableFieldData, setEditableFieldData] = useState(null);
+    // handle update after field edit or add
+    const handleUpdate = (event) => {
+        if(event.target === "field"){
+            const fieldEventData = event.data;
+            if(fieldEventData.type === "add"){
+                setFields(prev => [...prev, fieldEventData.field]);
+            }else if(fieldEventData.type === "edit"){
+                setFields(prev => prev.map(field => field.id === fieldEventData.field.id ? fieldEventData.field : field));
+            }
+        }else if(event.target === "entry"){
+            const entryEventData = event.data;
+            if(entryEventData.type === "duplicate"){
+                console.log("Entry duplicated");
+            }else if(entryEventData.type === "delete"){
+                console.log("Entry deleted");
+            }
+        }else{
+            console.log("Unknown event target");
+        }
+    }
+    // field modal handlers
     const handleFieldModal = ({type, field}) => {
-        // type can be "add" or "edit"
+        setFieldModalOpenType(type);
+        if (type === "add") {
+            setEditableFieldData(null);
+        } else if (type === "edit") {
+            setEditableFieldData(field);
+        }
     }
     return (
         <s-page>
+            <FieldModal type={fieldModalOpenType} data={editableFieldData} handleUpdate={handleUpdate} />
             <s-stack paddingBlock='small large'>
                 <s-grid gridTemplateColumns="1fr 2fr" gap="base large">
                     <s-grid-item>
@@ -90,7 +119,7 @@ export default function Database() {
                                                 </s-table-cell>
                                                 <s-table-cell>
                                                     <s-stack direction="inline" justifyContent="end">
-                                                        <s-button variant="tertiary" icon="edit" />
+                                                        <s-button variant="tertiary" icon="edit" commandFor="field-modal" onClick={() => {handleFieldModal({type: "edit", field: field})}} />
                                                         <s-button variant="tertiary" icon="delete" tone="critical" />
                                                     </s-stack>
                                                 </s-table-cell>
@@ -99,8 +128,7 @@ export default function Database() {
                                     </s-table-body>
                                 </s-table>
                                 <s-stack padding="none base base">
-                                    <s-button variant="ghost" icon="plus" commandFor="field-modal" onClick={() => {handleFieldModal({type: "add"})}}>Add new field</s-button>
-                                    <FieldModal/>
+                                    <s-button variant="ghost" icon="plus" commandFor="field-modal" onClick={() => {handleFieldModal({type: "add", field: null})}}>Add new field</s-button>
                                 </s-stack>
                             </Section>
                         </s-stack>
