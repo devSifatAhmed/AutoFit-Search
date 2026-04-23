@@ -1,15 +1,19 @@
-import { useLoaderData, useNavigation} from "react-router"
+import { useLoaderData, useNavigation, useFetcher } from "react-router"
 import Loader from '../components/essentials/Loader'
 import Text from '../components/essentials/Text'
 import Section from '../components/essentials/Section'
 import { useEffect, useState } from "react";
 import { getFields } from "../utils/fields.server";
 import { authenticate } from "../shopify.server";
-import { capitalizeFirstLetter } from "../func/capitalizeFirstLetter";
+import { capitalizeFirstLetter} from "../func/capitalizeFirstLetter";
 
 // import page compononents start
 import FieldModal from "../components/pages/database/home/FieldModal";
 // import page compononents end
+
+export async function action({request}) {
+    return null;
+}
 
 export async function loader({request}) {
     const { admin } = await authenticate.admin(request);
@@ -18,7 +22,7 @@ export async function loader({request}) {
 }
 
 export default function Database() {
-    const { fields: loadedFields } = useLoaderData();
+    // default page loading spinner start
     const navigation = useNavigation();
     const isLoading = navigation.state === "loading";
     if (isLoading) {
@@ -26,41 +30,50 @@ export default function Database() {
             <Loader />
         )
     }
+    // default page loading spinner end
+
+    // fields data from loader start 
+    const { fields: loadedFields } = useLoaderData();
     const [fields, setFields] = useState(loadedFields);
-    const [fieldModalOpenType, setFieldModalOpenType] = useState(null);
-    const [editableFieldData, setEditableFieldData] = useState(null);
-    // handle update after field edit or add
+    // fields data from loader end 
+
+    const fetcher = useFetcher();
+    // fetcher effect for fields data update after add/edit field start
+    const [saveProgress, setSaveProgress] = useState(false);
+    const [editableField, setEditableField] = useState(null);
+    const [modalType, setModalType] = useState(null);
+    const handleOpenModal = ({type, data}) => {
+        setModalType(type);
+        if (type === "edit") {
+            setEditableField(data);
+        } else {
+            setEditableField(null);
+        }
+        setTimeout(() => {
+            shopify.modal.show("field-modal");
+        }, 500);
+    };
+    // fetcher effect for fields data update after add/edit field end
+
+    // handling callback response from field modal & updating start
     const handleUpdate = (event) => {
-        if(event.target === "field"){
-            const fieldEventData = event.data;
-            if(fieldEventData.type === "add"){
-                setFields(prev => [...prev, fieldEventData.field]);
-            }else if(fieldEventData.type === "edit"){
-                setFields(prev => prev.map(field => field.id === fieldEventData.field.id ? fieldEventData.field : field));
-            }
-        }else if(event.target === "entry"){
-            const entryEventData = event.data;
-            if(entryEventData.type === "duplicate"){
-                console.log("Entry duplicated");
-            }else if(entryEventData.type === "delete"){
-                console.log("Entry deleted");
-            }
-        }else{
-            console.log("Unknown event target");
-        }
+        setSaveProgress(true);
+        setTimeout(() => {
+            setSaveProgress(false);
+            shopify.modal.hide("field-modal");
+            shopify.toast.show("Field saved successfully", { duration: 3000 });
+        }, 1000);
+        console.log("handling update in parent component", event);
     }
-    // field modal handlers
-    const handleFieldModal = ({type, field}) => {
-        setFieldModalOpenType(type);
-        if (type === "add") {
-            setEditableFieldData(null);
-        } else if (type === "edit") {
-            setEditableFieldData(field);
-        }
-    }
+    // handling callback response from field modal & updating end
     return (
         <s-page>
-            <FieldModal type={fieldModalOpenType} data={editableFieldData} handleUpdate={handleUpdate} />
+            <FieldModal
+                data={editableField} 
+                type={modalType} 
+                saveProgress={saveProgress} 
+                handleUpdate={handleUpdate} 
+            />
             <s-stack paddingBlock='small large'>
                 <s-grid gridTemplateColumns="1fr 2fr" gap="base large">
                     <s-grid-item>
@@ -119,7 +132,7 @@ export default function Database() {
                                                 </s-table-cell>
                                                 <s-table-cell>
                                                     <s-stack direction="inline" justifyContent="end">
-                                                        <s-button variant="tertiary" icon="edit" commandFor="field-modal" onClick={() => {handleFieldModal({type: "edit", field: field})}} />
+                                                        <s-button variant="tertiary" icon="edit" onClick={() => handleOpenModal({ type: "edit", data: field })} />
                                                         <s-button variant="tertiary" icon="delete" tone="critical" />
                                                     </s-stack>
                                                 </s-table-cell>
@@ -128,7 +141,7 @@ export default function Database() {
                                     </s-table-body>
                                 </s-table>
                                 <s-stack padding="none base base">
-                                    <s-button variant="ghost" icon="plus" commandFor="field-modal" onClick={() => {handleFieldModal({type: "add", field: null})}}>Add new field</s-button>
+                                    <s-button variant="secondary" icon="plus" onClick={()=>handleOpenModal({ type: "add", data: null })}>Add new field</s-button>
                                 </s-stack>
                             </Section>
                         </s-stack>
