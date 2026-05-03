@@ -1,0 +1,56 @@
+{
+    "field_x": [
+        {
+            "id": 1,
+            "name": "keyword1"
+        },
+        {
+            "id": 2,
+            "name": "keyword2"
+        },
+        {
+            "id": 3,
+            "name": "keyword3"
+        },
+        {
+            "id": 4,
+            "name": "keyword4"
+        }
+    ],
+    "field_y": [
+        {
+            "id": 1,
+            "name": "keyword1"
+        },
+        {
+            "id": 2,
+            "name": "keyword2"
+        },
+        {
+            "id": 3,
+            "name": "keyword3"
+        },
+        {
+            "id": 4,
+            "name": "keyword4"
+        }
+    ],
+    "field_z": [
+        {
+            "id": 1,
+            "name": 1975
+        },
+        {
+            "id": 2,
+            "name": 1979
+        },
+        {
+            "id": 3,
+            "name": 1980
+        },
+        {
+            "id": 4,
+            "name": 1981
+        }
+    ]
+}

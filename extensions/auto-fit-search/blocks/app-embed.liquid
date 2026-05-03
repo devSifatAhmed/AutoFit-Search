@@ -1,7 +1,9 @@
+{% assign appData = app.metafields.autofit_search.fields.value %}
 <script>
     document.addEventListener("DOMContentLoaded", () => {
         {% comment %} console.clear(); {% endcomment %}
         console.log("AutoFit Search app loaded successfully.");
+        console.log("AutoFit Search app data: ", {{ appData | json }});
     });
     window.autoFitConfig = [
         {

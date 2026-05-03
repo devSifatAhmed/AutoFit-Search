@@ -1,18 +1,16 @@
 export const Select = {
-    type: "select",
-    visibility: "visible",
-    sortby: "a-z",
+    type: "SELECT",
+    visibility: "VISIBLE",
+    sortOrder: "A_Z",
     label: "Select",
     placeholder: "Enter your placeholder"
 };
 export const Range = {
-    type: "range",
-    visibility: "visible",
-    sortby: "a-z",
+    type: "RANGE",
+    visibility: "VISIBLE",
+    sortOrder: "A_Z",
     label: "Range",
     placeholder: "Enter your placeholder",
-    values: {
-        start: 1970,
-        end: 2026
-    }
+    rangeStart: 1970,
+    rangeEnd: 2026
 }

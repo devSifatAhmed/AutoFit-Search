@@ -1,9 +1,27 @@
-import { useNavigation } from "react-router"
+import { useLoaderData, useNavigation } from "react-router"
 import Loader from '../components/essentials/Loader'
 import Text from '../components/essentials/Text'
 import Section from "../components/essentials/Section";
 import { useState } from "react";
+import { authenticate } from "../shopify.server";
+
+export async function action({ request }) {
+    await authenticate.admin(request);
+    return null;
+}
+
+export async function loader({ request }) {
+    const { admin } = await authenticate.admin(request);
+    const { getFields } = await import("../utils/fields.server");
+    const { getShopData } = await import("../utils/shopData.server");
+    const shopData = await getShopData(admin);
+    const fields = await getFields(admin);
+    return { fields, shopData };
+}
+
+
 export default function DatabaseEdit() {
+    const { fields, shopData, rows } = useLoaderData();
     const navigation = useNavigation();
     const isLoading = navigation.state === "loading";
     if (isLoading) {
@@ -11,7 +29,6 @@ export default function DatabaseEdit() {
             <Loader />
         )
     }
-    const yearsMap = { start: 1970, end: 2026 };
     const [addingRole, setAddingRole] = useState("product");
     const [products, setProducts] = useState([]);
     const [collections, setCollections] = useState([]);
@@ -37,7 +54,7 @@ export default function DatabaseEdit() {
         } else if (role === "collection") {
             const selected = await shopify.resourcePicker({
                 type: 'collection',
-                multiple: true,
+                multiple: false,
                 selectionIds: [
                     ...collections.map((collection) => (
                         {
@@ -82,37 +99,51 @@ export default function DatabaseEdit() {
                     </s-stack>
                     <s-divider />
                     <s-stack padding="small base base">
-                        <s-grid gridTemplateColumns="2fr 2fr 1fr 1fr" gap="small base">
-                            <s-grid-item>
-                                <s-text-field label="Brand" />
-                            </s-grid-item>
-                            <s-grid-item>
-                                <s-text-field label="Model" />
-                            </s-grid-item>
-                            <s-grid-item>
-                                <s-select label="Year From" placeholder=" ">
-                                    {Array.from(
-                                        { length: yearsMap.end - yearsMap.start + 1 },
-                                        (_, i) => yearsMap.start + i
-                                    ).reverse().map((year) => (
-                                        <s-option key={year} value={year}>
-                                            {year}
-                                        </s-option>
-                                    ))}
-                                </s-select>
-                            </s-grid-item>
-                            <s-grid-item>
-                                <s-select label="Year From" placeholder=" ">
-                                    {Array.from(
-                                        { length: yearsMap.end - yearsMap.start + 1 },
-                                        (_, i) => yearsMap.start + i
-                                    ).reverse().map((year) => (
-                                        <s-option key={year} value={year}>
-                                            {year}
-                                        </s-option>
-                                    ))}
-                                </s-select>
-                            </s-grid-item>
+                        <s-grid gridTemplateColumns="repeat(3, 1fr)" gap="small base">
+                            {fields.map((field) => {
+                                if(field?.type === 'select'){
+                                    return (
+                                        <>
+                                            <s-grid-item>
+                                                <s-text-field label={field?.label} />
+                                            </s-grid-item>
+                                        </>
+                                    )
+                                }else if (field?.type === 'range'){
+                                    return (
+                                        <>
+                                            <s-grid-item>
+                                                <s-grid gridTemplateColumns="1fr 1fr" gap="small base">
+                                                    <s-grid-item>
+                                                        <s-select label={`${field?.label} From`} placeholder=" ">
+                                                            {Array.from(
+                                                                { length: field?.values?.end - field?.values?.start + 1 },
+                                                                (_, i) => field?.values?.start + i
+                                                            ).reverse().map((year) => (
+                                                                <s-option key={year} value={year}>
+                                                                    {year}
+                                                                </s-option>
+                                                            ))}
+                                                        </s-select>
+                                                    </s-grid-item>
+                                                    <s-grid-item>
+                                                        <s-select label={`${field?.label} To`} placeholder=" ">
+                                                            {Array.from(
+                                                                { length: field?.values?.end - field?.values?.start + 1 },
+                                                                (_, i) => field?.values?.start + i
+                                                            ).reverse().map((year) => (
+                                                                <s-option key={year} value={year}>
+                                                                    {year}
+                                                                </s-option>
+                                                            ))}
+                                                        </s-select>
+                                                    </s-grid-item>
+                                                </s-grid>
+                                            </s-grid-item>
+                                        </>
+                                    )
+                                }
+                            })}
                         </s-grid>
                     </s-stack>
                 </Section>
@@ -128,7 +159,7 @@ export default function DatabaseEdit() {
                                     </s-stack>
                                 </s-clickable>
                                 <s-clickable onClick={() => { setAddingRole("product") }}>
-                                    <div style={{ textAlign: "center", paddingTop: "5px" }}>
+                                    <div style={{ textAlign: "center", paddingTop: "5px", background: "#fff" }}>
                                         Products
                                     </div>
                                 </s-clickable>
@@ -140,7 +171,7 @@ export default function DatabaseEdit() {
                                     </s-stack>
                                 </s-clickable>
                                 <s-clickable onClick={() => { setAddingRole("collection") }}>
-                                    <div style={{ textAlign: "center", paddingTop: "5px" }}>
+                                    <div style={{ textAlign: "center", paddingTop: "5px", background: "#fff" }}>
                                         Collections
                                     </div>
                                 </s-clickable>

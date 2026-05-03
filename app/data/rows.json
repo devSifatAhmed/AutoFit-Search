@@ -1,0 +1,62 @@
+[
+    {
+        "id": "row__a1b2c3d4e5f6g7h8i9j0",
+        "columns": {
+            "brand__c1a2b3d4e5f6g7h8i9j0": "Honda",
+            "model__c1a2b3d4e5f6g7h8i9j0": "Civic",
+            "year__c1a2b3d4e5f6g7h8i9j0": "2015-2020"
+        },
+        "attachments": ["gid://Collection/1", "gid://Collection/2"],
+        "role": "collection"
+    },
+    {
+        "id": "row__k2l3m4n5o6p7q8r9s0t1",
+        "columns": {
+            "brand__c1a2b3d4e5f6g7h8i9j0": "Toyota",
+            "model__c1a2b3d4e5f6g7h8i9j0": "FJ Cruiser",
+            "year__c1a2b3d4e5f6g7h8i9j0": "2010-2014"
+        },
+        "attachments": ["gid://Product/1", "gid://Product/2", "gid://Product/3"],
+        "role": "product"
+    },
+    {
+        "id": "row__u2v3w4x5y6z7a8b9c0d1",
+        "columns": {
+            "brand__c1a2b3d4e5f6g7h8i9j0": "Ford",
+            "model__c1a2b3d4e5f6g7h8i9j0": "Mustang",
+            "year__c1a2b3d4e5f6g7h8i9j0": "2018-2023"
+        },
+        "attachments": ["gid://Product/4", "gid://Product/5"],
+        "role": "product"
+    },
+    {
+        "id": "row__e2f3g4h5i6j7k8l9m0n1",
+        "columns": {
+            "brand__c1a2b3d4e5f6g7h8i9j0": "BMW",
+            "model__c1a2b3d4e5f6g7h8i9j0": "X5",
+            "year__c1a2b3d4e5f6g7h8i9j0": "2019-2024"
+        },
+        "attachments": ["gid://Collection/3"],
+        "role": "collection"
+    },
+    {
+        "id": "row__o2p3q4r5s6t7u8v9w0x1",
+        "columns": {
+            "brand__c1a2b3d4e5f6g7h8i9j0": "Tesla",
+            "model__c1a2b3d4e5f6g7h8i9j0": "Model 3",
+            "year__c1a2b3d4e5f6g7h8i9j0": "2020-2025"
+        },
+        "attachments": ["gid://Product/6", "gid://Product/7", "gid://Product/8"],
+        "role": "product"
+    },
+    {
+        "id": "row__y2z3a4b5c6d7e8f9g0h1",
+        "columns": {
+            "brand__c1a2b3d4e5f6g7h8i9j0": "Nissan",
+            "model__c1a2b3d4e5f6g7h8i9j0": "Altima",
+            "year__c1a2b3d4e5f6g7h8i9j0": "2016-2022"
+        },
+        "attachments": ["gid://Collection/4", "gid://Collection/5"],
+        "role": "collection"
+    }
+]

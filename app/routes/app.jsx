@@ -2,17 +2,17 @@ import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../shopify.server";
+import { validateShop } from "../utils/validate_shop.server";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-
+  const { admin } = await authenticate.admin(request);
+  await validateShop(admin);
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
 export default function App() {
   const { apiKey } = useLoaderData();
-
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>

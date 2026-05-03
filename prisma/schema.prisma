@@ -1,16 +1,9 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
-
-// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
-// enough when changing adapters.
-// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
-  provider = "sqlite"
-  url      = "file:dev.sqlite"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Session {
@@ -31,4 +24,127 @@ model Session {
   emailVerified Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
+}
+
+model Shop {
+  id            String    @id @default(uuid())
+  shopifyGid    String    @unique
+  domain        String?
+  name          String?
+
+  fields        Field[]
+  rows          SearchRow[]
+  suggestions   FilterSuggestion[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Field {
+  id            String    @id @default(uuid())
+  shopId        String
+  shop          Shop      @relation(fields: [shopId], references:[shopifyGid], onDelete: Cascade)
+
+  type          FieldType
+  label         String
+  placeholder   String?
+  visibility    Visibility
+  sortOrder     SortOrder
+
+  rangeStart    Int?
+  rangeEnd      Int?
+
+  values        RowValue[]
+  suggestions   FilterSuggestion[]
+
+  position      Int       @default(0)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([shopId, id])
+  @@unique([shopId, position])
+  @@index([shopId])
+}
+
+enum FieldType {
+  SELECT
+  RANGE
+}
+
+enum SortOrder {
+  A_Z
+  Z_A
+  DB_ORDER
+  POPULARITY
+}
+
+enum Visibility {
+  VISIBLE
+  HIDDEN
+}
+
+model SearchRow {
+  id            String    @id @default(uuid())
+  shopId        String
+  shop          Shop      @relation(fields: [shopId], references:[shopifyGid], onDelete: Cascade)
+
+  values        RowValue[]
+  attachments   RowAttachment[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([shopId])
+}
+
+model RowValue {
+  id            String    @id @default(uuid())
+
+  rowId         String
+  row           SearchRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+
+  fieldId       String
+  field         Field     @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  value         String?
+  minValue      Int?
+  maxValue      Int?
+
+  @@unique([rowId, fieldId])
+  @@index([fieldId, value])
+  @@index([fieldId, minValue, maxValue])
+}
+
+model RowAttachment {
+  id            String    @id @default(uuid())
+
+  rowId         String
+  row           SearchRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+
+  type          AttachmentType
+  shopifyGid    String
+
+  @@unique([rowId, shopifyGid])
+  @@index([shopifyGid])
+}
+
+enum AttachmentType {
+  PRODUCT
+  COLLECTION
+}
+
+model FilterSuggestion {
+  id            String    @id @default(uuid())
+  
+  shopId        String
+  shop          Shop      @relation(fields: [shopId], references: [shopifyGid], onDelete: Cascade)
+
+  fieldId       String
+  field         Field     @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  value         String
+  
+  @@unique([shopId, fieldId, value])
+  @@index([shopId, fieldId])
 }
