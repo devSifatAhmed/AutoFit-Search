@@ -8,7 +8,7 @@ export default function ButtonTertiary({ children, isDragging = false, style = {
             {...props}
             style={{
                 cursor: isDragging ? "grabbing" : "grab",
-                background: isHovered || isDragging ? '#f1f8ff' : '#fff',
+                background: isHovered || isDragging ? '#dfdfdf' : '#F7F7F7',
                 padding: '4px 5px',
                 borderRadius: '4px',
                 touchAction: "none",

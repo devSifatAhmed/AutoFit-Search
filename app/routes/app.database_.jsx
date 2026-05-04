@@ -388,7 +388,6 @@ export default function Database() {
                                         alignItems: "center",
                                         minHeight: "46px",
                                         background: "#f7f7f7",
-                                        borderBottom: "1px solid #e3e3e3",
                                         fontWeight: 600,
                                     }}>
                                         <div style={{ padding: "8px 16px 8px 52px" }}>Data column / Form field</div>
@@ -428,6 +427,7 @@ export default function Database() {
                                         </DragOverlay>
                                     </DndContext>
                                 </div>
+                                <s-divider/>
                                 <s-stack padding="base">
                                     <s-button variant="secondary" icon="plus" onClick={()=>handleOpenModal({ type: "add", data: null })}>Add new field</s-button>
                                 </s-stack>
