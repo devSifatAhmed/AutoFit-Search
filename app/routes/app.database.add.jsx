@@ -4,7 +4,7 @@ import Text from '../components/essentials/Text'
 import Section from "../components/essentials/Section";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
-
+import CustomClickable from "../components/essentials/CustomClickable";
 export async function action({ request }) {
     await authenticate.admin(request);
     return null;
@@ -15,10 +15,10 @@ export async function loader({ request }) {
     const { getFields } = await import("../utils/fields.server");
     const { getShopData } = await import("../utils/shopData.server");
     const shopData = await getShopData(admin);
-    const fields = await getFields(admin);
+    const fields = await getFields({ admin, shopId: shopData.id });
+    console.log("Fields at server side: ", fields);
     return { fields, shopData };
 }
-
 
 export default function DatabaseEdit() {
     const { fields, shopData, rows } = useLoaderData();
@@ -101,40 +101,82 @@ export default function DatabaseEdit() {
                     <s-stack padding="small base base">
                         <s-grid gridTemplateColumns="repeat(3, 1fr)" gap="small base">
                             {fields.map((field) => {
-                                if(field?.type === 'select'){
+                                if(field?.type === 'SELECT'){
                                     return (
                                         <>
                                             <s-grid-item>
-                                                <s-text-field label={field?.label} />
+                                                <s-clickable commandFor={field?.id} command='--show'>
+                                                    <div style={{background: '#fff', cursor: "text"}}>
+                                                        <s-text-field
+                                                            label={field?.label}
+                                                            placeholder={`Enter ${field?.label?.toLowerCase()}`}
+                                                            autocomplete="off"
+                                                        />
+                                                    </div>
+                                                </s-clickable>
+                                                <s-popover id={field?.id} inlineSize="300px">
+                                                    <div style={{
+                                                        padding: '7px'
+                                                    }}>
+                                                        <CustomClickable
+                                                            onClick={()=> {console.clear(); console.log('Click');}}
+                                                            borderRadius="4px"
+                                                            padding="4px 13px"
+                                                            background="strong"
+                                                        >
+                                                            Toyota
+                                                        </CustomClickable>
+                                                        <CustomClickable
+                                                            onClick={()=> {console.clear(); console.log('Click');}}
+                                                            borderRadius="4px"
+                                                            padding="4px 13px"
+                                                            background="strong"
+                                                        >
+                                                            Toyota
+                                                        </CustomClickable>
+                                                        <CustomClickable
+                                                            onClick={()=> {console.clear(); console.log('Click');}}
+                                                            borderRadius="4px"
+                                                            padding="4px 13px"
+                                                            background="strong"
+                                                        >
+                                                            Toyota
+                                                        </CustomClickable>
+                                                        <CustomClickable
+                                                            onClick={()=> {console.clear(); console.log('Click');}}
+                                                            borderRadius="4px"
+                                                            padding="4px 13px"
+                                                            background="strong"
+                                                        >
+                                                            Toyota
+                                                        </CustomClickable>
+                                                    </div>
+                                                </s-popover>
                                             </s-grid-item>
                                         </>
                                     )
-                                }else if (field?.type === 'range'){
+                                }else if (field?.type === 'RANGE'){
                                     return (
                                         <>
                                             <s-grid-item>
                                                 <s-grid gridTemplateColumns="1fr 1fr" gap="small base">
                                                     <s-grid-item>
-                                                        <s-select label={`${field?.label} From`} placeholder=" ">
-                                                            {Array.from(
-                                                                { length: field?.values?.end - field?.values?.start + 1 },
-                                                                (_, i) => field?.values?.start + i
-                                                            ).reverse().map((year) => (
-                                                                <s-option key={year} value={year}>
-                                                                    {year}
-                                                                </s-option>
+                                                        <s-select
+                                                            label={`${field?.label} From`}
+                                                            placeholder={`Select ${field?.label?.toLowerCase()} from`}
+                                                        >
+                                                            {Array.from({ length: field?.rangeEnd - field?.rangeStart }, (_, index) => field?.rangeStart + index).map((year) => (
+                                                                <s-option key={year} value={year}>{year}</s-option>
                                                             ))}
                                                         </s-select>
                                                     </s-grid-item>
                                                     <s-grid-item>
-                                                        <s-select label={`${field?.label} To`} placeholder=" ">
-                                                            {Array.from(
-                                                                { length: field?.values?.end - field?.values?.start + 1 },
-                                                                (_, i) => field?.values?.start + i
-                                                            ).reverse().map((year) => (
-                                                                <s-option key={year} value={year}>
-                                                                    {year}
-                                                                </s-option>
+                                                        <s-select
+                                                            label={`${field?.label} To`}
+                                                            placeholder={`Select ${field?.label?.toLowerCase()} to`}
+                                                        >
+                                                            {Array.from({ length: field?.rangeEnd - field?.rangeStart }, (_, index) => field?.rangeStart + index).reverse().map((year) => (
+                                                                <s-option key={year} value={year}>{year}</s-option>
                                                             ))}
                                                         </s-select>
                                                     </s-grid-item>
