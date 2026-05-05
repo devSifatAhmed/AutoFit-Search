@@ -15,20 +15,23 @@ function normalizeField(field) {
     };
 }
 
-async function listFields(shopId) {
+async function listFields({shopId, suggestions}) {
+
     return prisma.field.findMany({
         where: {
             shopId,
         },
         orderBy: [
-            { position: "asc" },
-            { createdAt: "asc" },
+            { position: "asc" }
         ],
+        include: {
+            suggestions: suggestions ? true : false
+        }
     });
 }
 
 async function normalizeFieldPositions(shopId) {
-    const fields = await listFields(shopId);
+    const fields = await listFields({shopId});
 
     await prisma.$transaction(async (tx) => {
         for (const [index, field] of fields.entries()) {
@@ -54,18 +57,17 @@ async function normalizeFieldPositions(shopId) {
         }
     });
 
-    return listFields(shopId);
+    return listFields({shopId});
 }
 
-export async function getFields({ admin, shopId }) {
-    let fields = await listFields(shopId);
+export async function getFields({ admin, shopId, suggestions }) {
+    let fields = await listFields({shopId, suggestions});
 
     if (fields.length === 0 && admin) {
         await validateShop(admin);
-        fields = await listFields(shopId);
+        fields = await listFields({shopId, suggestions});
     }
-
-    return normalizeFieldPositions(shopId);
+    return fields;
 }
 
 export async function createField({ admin, shopId, field }) {
@@ -83,7 +85,7 @@ export async function createField({ admin, shopId, field }) {
         },
     });
 
-    return listFields(shopId);
+    return listFields({shopId});
 }
 
 export async function editField({ shopId, field }) {
@@ -94,7 +96,7 @@ export async function editField({ shopId, field }) {
         data: normalizeField(field),
     });
 
-    return listFields(shopId);
+    return listFields({shopId});
 }
 
 export async function deleteField({ shopId, field }) {
@@ -109,10 +111,10 @@ export async function deleteField({ shopId, field }) {
 
 export async function reorderFields({ shopId, fieldIds }) {
     if (!Array.isArray(fieldIds) || fieldIds.length === 0) {
-        return listFields(shopId);
+        return listFields({shopId});
     }
 
-    const fields = await listFields(shopId);
+    const fields = await listFields({shopId});
     const existingFieldIds = fields.map((field) => field.id);
     const hasSameFields = existingFieldIds.length === fieldIds.length
         && existingFieldIds.every((fieldId) => fieldIds.includes(fieldId));
@@ -145,5 +147,5 @@ export async function reorderFields({ shopId, fieldIds }) {
         }
     });
 
-    return listFields(shopId);
+    return listFields({shopId});
 }

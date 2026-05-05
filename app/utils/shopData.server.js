@@ -12,6 +12,5 @@ export async function getShopData(admin) {
     `);
     const responseJson = await response.json();
     const shopData = responseJson.data.shop || {};
-    console.log("Shop Data: ", shopData);
     return shopData;
 }
