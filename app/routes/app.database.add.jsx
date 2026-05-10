@@ -2,11 +2,16 @@ import { useLoaderData, useNavigation } from "react-router"
 import Loader from '../components/essentials/Loader'
 import Text from '../components/essentials/Text'
 import Section from "../components/essentials/Section";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { authenticate } from "../shopify.server";
 import CustomClickable from "../components/essentials/CustomClickable";
+import { useFetcher } from "react-router";
 export async function action({ request }) {
     await authenticate.admin(request);
+    const formData = await request.formData();
+    console.log("Form Data: ", formData);
+    // const shopId = formData.get("shopId");
+    // const type = formData.get("type");
     return null;
 }
 
@@ -20,7 +25,6 @@ export async function loader({ request }) {
 }
 
 export default function DatabaseEdit() {
-    const { fields, shopData, rows } = useLoaderData();
     const navigation = useNavigation();
     const isLoading = navigation.state === "loading";
     if (isLoading) {
@@ -28,11 +32,54 @@ export default function DatabaseEdit() {
             <Loader />
         )
     }
-    const [addingRole, setAddingRole] = useState("product");
+    const fetcher = useFetcher();
+    const { fields, shopData } = useLoaderData();
+    const [addingRole, setAddingRole] = useState("PRODUCT");
     const [products, setProducts] = useState([]);
     const [collections, setCollections] = useState([]);
+    const [isSaving, setIsSaving] = useState(null);
+    const [isChanged, setIsChanged] = useState(false);
+    const [fieldData, setFieldData] = useState([]);
+    useEffect(() => {
+        const fieldsData = fields.map((field) => {
+            if(field.type === "SELECT") {
+                return {
+                    fieldId: field.id,
+                    value: null
+                }
+            }else {
+                return {
+                    fieldId: field.id,
+                    minValue: null,
+                    maxValue: null
+                }
+            }
+        });
+        setFieldData(fieldsData);
+    }, [fields]);
+    const handleChangeStatus = () => {
+        if(addingRole === "PRODUCT") {
+            if(products.length > 0) {
+                setIsChanged(true);
+            }else {
+                setIsChanged(false);
+            }
+        }else if(addingRole === "COLLECTION") {
+            if(collections.length > 0) {
+                setIsChanged(true);
+            }else{
+                setIsChanged(false);
+            }
+        }
+    }
+    useEffect(() => {
+        handleChangeStatus();
+    }, [addingRole, products, collections]);
+    const handleAddingRole = (role) => {
+        setAddingRole(role);
+    }
     const handleAddButton = async (role) => {
-        if (role === "product") {
+        if (role === "PRODUCT") {
             const selected = await shopify.resourcePicker({
                 type: 'product',
                 multiple: true,
@@ -46,11 +93,13 @@ export default function DatabaseEdit() {
                 ]
             });
             if (selected) {
-                setProducts(selected)
+                setProducts(selected);
+                handleChangeStatus();
             } else {
                 setProducts(products);
+                handleChangeStatus();
             }
-        } else if (role === "collection") {
+        } else if (role === "COLLECTION") {
             const selected = await shopify.resourcePicker({
                 type: 'collection',
                 multiple: false,
@@ -64,14 +113,138 @@ export default function DatabaseEdit() {
             });
             if (selected) {
                 setCollections(selected)
-                console.log(selected);
+                handleChangeStatus();
             } else {
                 setCollections(collections);
+                handleChangeStatus();
             }
         } else {
             console.log("Selection method error.");
         }
     }
+    const [isDeleting, setIsDeleting] = useState(null);
+    const handleDeleteProduct = (e) => {
+        setIsDeleting(e.id);
+        const id = e.id;
+        const newProducts = products.filter((product) => product.id !== id);
+        setProducts(newProducts);
+        setIsDeleting(null);
+    }
+    const handleDeleteCollection = (e) => {
+        setIsDeleting(e.id);
+        const id = e.id;
+        const newCollections = collections.filter((collection) => collection.id !== id);
+        setCollections(newCollections);
+        setIsDeleting(null);
+    }
+    const [isCheckedAllProduct, setIsCheckedAllProduct] = useState(false);
+    const handleMarkAllProduct = (e) => {
+        const value = e.target.checked;
+        if(value) {
+            setIsCheckedAllProduct(true);
+        } else {
+            setIsCheckedAllProduct(false);
+        }
+    }
+    const [isCheckedAllCollection, setIsCheckedAllCollection] = useState(false);
+    const handleMarkAllCollection = (e) => {
+        const value = e.target.checked;
+        if(value) {
+            setIsCheckedAllCollection(true);
+        } else {
+            setIsCheckedAllCollection(false);
+        }
+    }
+
+    const handleTextFieldData = (e) => {
+        const id = e.id;
+        const value = e.value;
+        const newFieldData = fieldData.map((field) => field.fieldId === id ? { ...field, value } : field);
+        setFieldData(newFieldData);
+    }
+    const handleNumberFieldData = (e) => {
+        const id = e.id;
+        if(e.minValue) {
+            const minValue = e.minValue;
+            const newFieldData = fieldData.map((field) => field.fieldId === id ? { ...field, minValue } : field);
+            setFieldData(newFieldData);
+        }
+        if(e.maxValue) {
+            const maxValue = e.maxValue;
+            const newFieldData = fieldData.map((field) => field.fieldId === id ? { ...field, maxValue } : field);
+            setFieldData(newFieldData);
+        }
+    }
+
+
+    const saveSuccessToat = () => {
+        shopify.toast.show("Row added successfully");
+    }
+    const validateSubmitData = () => {
+        if(addingRole === "PRODUCT" && products.length === 0) {
+            shopify.toast.show("Please select at least one product", {
+                isError: true
+            });
+            setIsSaving(null);
+            return;
+        }
+        if(addingRole === "COLLECTION" && collections.length === 0) {
+            shopify.toast.show("Please select a collection", {
+                isError: true
+            });
+            setIsSaving(null);
+            return;
+        }
+        for (const field of fieldData) {
+            const fieldMeta = fields?.find((f) => f.id === field.fieldId);
+
+            if ("value" in field && (field.value === null || field.value === "")) {
+                shopify.toast.show(`Please fill the ${fieldMeta?.label} field`, {
+                    isError: true,
+                });
+                setIsSaving(null);
+                return;
+            }
+
+            if ("minValue" in field && (field.minValue === null || field.minValue === "")) {
+                shopify.toast.show(`Please select the ${fieldMeta?.label} field start from`, {
+                    isError: true,
+                });
+                setIsSaving(null);
+                return;
+            }
+
+            if ("maxValue" in field && (field.maxValue === null || field.maxValue === "")) {
+                shopify.toast.show(`Please select the ${fieldMeta?.label} field end to`, {
+                    isError: true,
+                });
+                setIsSaving(null);
+                return;
+            }
+        }
+    }
+    const handleSave = () => {
+        setIsSaving("save");
+        if(validateSubmitData()) return;
+        const formData = new FormData();
+        formData.append('target', 'add');
+        formData.append('type', addingRole);
+        formData.append('data', JSON.stringify(fieldData));
+        formData.append('attachments', addingRole === "PRODUCT" ? JSON.stringify(products) : JSON.stringify(collections));
+        formData.append('shopId', shopData.id);
+        fetcher.submit(formData, {
+            method: "post",
+            action: "/app/database/add",
+        });
+        setIsSaving(null);
+    }
+    const handleSaveNext = () => {
+        setIsSaving("saveNext");
+        validateSubmitData();
+    }
+
+    console.clear();
+    console.log("fieldData", fieldData);
     return (
         <s-page>
             <s-stack paddingBlock="base large">
@@ -84,9 +257,9 @@ export default function DatabaseEdit() {
                     </s-box>
                     <s-box>
                         <s-stack direction="inline" alignItems="center" justifyContent="end" gap="small">
-                            <s-button variant="secondary">Cancel</s-button>
-                            <s-button variant="primary">Save</s-button>
-                            <s-button variant="primary">Save & add next</s-button>
+                            <s-button variant="secondary" href="/app/database" disabled={isSaving !== null}>Cancel</s-button>
+                            <s-button variant="primary" onClick={handleSave} disabled={!isChanged || isSaving === "saveNext"} loading={isSaving === "save"}>Save</s-button>
+                            <s-button variant="primary" onClick={handleSaveNext} disabled={!isChanged || isSaving === "save" } loading={isSaving === "saveNext"}>Save & add next</s-button>
                         </s-stack>
                     </s-box>
                 </s-grid>
@@ -113,6 +286,8 @@ export default function DatabaseEdit() {
                                                                 label={field?.label}
                                                                 placeholder={`Enter ${field?.label?.toLowerCase()}`}
                                                                 autocomplete="off"
+                                                                onChange={(e)=> {handleTextFieldData({id: field?.id, value: e.target.value})}}
+                                                                value={fieldData?.find((item) => item.fieldId === field?.id)?.value || ""}
                                                             />
                                                         </div>
                                                     </s-clickable>
@@ -124,10 +299,10 @@ export default function DatabaseEdit() {
                                                                 {suggestions?.map((suggestion, key) => (
                                                                     <CustomClickable
                                                                         key={key}
-                                                                        onClick={()=> {console.clear(); console.log('Click: ', suggestion?.value);}}
                                                                         borderRadius="4px"
                                                                         padding="4px 13px"
                                                                         background="strong"
+                                                                        onClick={()=> {handleTextFieldData({id: field?.id, value: suggestion?.value})}}
                                                                     >
                                                                         {suggestion?.value}
                                                                     </CustomClickable>
@@ -147,7 +322,8 @@ export default function DatabaseEdit() {
                                                             <s-select
                                                                 label={`${field?.label} From`}
                                                                 placeholder={`Select ${field?.label?.toLowerCase()} from`}
-                                                            >
+                                                                onChange={(e)=> {handleNumberFieldData({id: field?.id, minValue: e.currentTarget.value})}}
+                                                                >
                                                                 {Array.from({ length: field?.rangeEnd - field?.rangeStart }, (_, index) => field?.rangeStart + index).map((year) => (
                                                                     <s-option key={year} value={year}>{year}</s-option>
                                                                 ))}
@@ -157,6 +333,7 @@ export default function DatabaseEdit() {
                                                             <s-select
                                                                 label={`${field?.label} To`}
                                                                 placeholder={`Select ${field?.label?.toLowerCase()} to`}
+                                                                onChange={(e)=> {handleNumberFieldData({id: field?.id, maxValue: e.currentTarget.value})}}
                                                             >
                                                                 {Array.from({ length: field?.rangeEnd - field?.rangeStart }, (_, index) => field?.rangeStart + index).reverse().map((year) => (
                                                                     <s-option key={year} value={year}>{year}</s-option>
@@ -179,26 +356,26 @@ export default function DatabaseEdit() {
                     <s-stack padding="base">
                         <s-grid gridTemplateColumns="repeat(2, 160px)" gap="small base">
                             <s-stack>
-                                <s-clickable onClick={() => { setAddingRole("product") }} background={addingRole === "product" ? "strong" : "subdued"} borderRadius="base" overflow="hidden" border={addingRole === "product" ? "large strong" : "base base"}>
+                                <s-clickable onClick={() => handleAddingRole("PRODUCT")} background={addingRole === "PRODUCT" ? "strong" : "subdued"} borderRadius="base" overflow="hidden" border={addingRole === "PRODUCT" ? "large strong" : "base base"}>
                                     <s-stack direction="inline" justifyContent="center" padding="small">
                                         <s-icon type="product" />
                                     </s-stack>
                                 </s-clickable>
-                                <s-clickable onClick={() => { setAddingRole("product") }}>
+                                <s-clickable onClick={() => handleAddingRole("PRODUCT")}>
                                     <div style={{ textAlign: "center", paddingTop: "5px", background: "#fff" }}>
                                         Products
                                     </div>
                                 </s-clickable>
                             </s-stack>
                             <s-stack>
-                                <s-clickable onClick={() => { setAddingRole("collection") }} background={addingRole === "collection" ? "strong" : "subdued"} borderRadius="base" overflow="hidden" border={addingRole === "collection" ? "large strong" : "base base"}>
+                                <s-clickable onClick={() => handleAddingRole("COLLECTION")} background={addingRole === "COLLECTION" ? "strong" : "subdued"} borderRadius="base" overflow="hidden" border={addingRole === "COLLECTION" ? "large strong" : "base base"}>
                                     <s-stack direction="inline" justifyContent="center" padding="small">
                                         <s-icon type="collection" />
                                     </s-stack>
                                 </s-clickable>
-                                <s-clickable onClick={() => { setAddingRole("collection") }}>
+                                <s-clickable onClick={() => handleAddingRole("COLLECTION")}>
                                     <div style={{ textAlign: "center", paddingTop: "5px", background: "#fff" }}>
-                                        Collections
+                                        Collection
                                     </div>
                                 </s-clickable>
                             </s-stack>
@@ -206,34 +383,36 @@ export default function DatabaseEdit() {
                     </s-stack>
                     <s-divider />
                     <s-stack padding="base" direction="inline" justifyContent="space-between" alignItems="center">
-                        {addingRole === "product" ? (
+                        {addingRole === "PRODUCT" ? (
                             products.length > 0 ? (
-                                <s-checkbox />
+                                <s-checkbox checked={isCheckedAllProduct} onChange={handleMarkAllProduct} />
                             ) : (
                                 <s-paragraph color="subdued">No products associated with the search rule</s-paragraph>
                             )
                         ) : (
                             collections.length > 0 ? (
-                                <s-checkbox />
+                                <s-checkbox checked={isCheckedAllCollection} onChange={handleMarkAllCollection} />
                             ) : (
-                                <s-paragraph color="subdued">No collections associated with the search rule</s-paragraph>
+                                <s-paragraph color="subdued">No collection associated with the search rule</s-paragraph>
                             )
                         )}
                         <s-button variant="primary" onClick={() => { handleAddButton(addingRole) }}>
-                            Add {addingRole === "product" ? 'Products' : 'Collections'}
+                            {/* Add {addingRole === "PRODUCT" ? 'Products' : 'Collections'} */}
+                            {addingRole === "PRODUCT" ? 'Add Products' : (
+                                collections.length > 0 ? 'Change Collection' : 'Add Collection'
+                            )}
                         </s-button>
                     </s-stack>
 
-                    {addingRole === "product" ? (
+                    {addingRole === "PRODUCT" ? (
                         <>
                             {products.map((product) => {
                                 return (
                                     <>
-                                        {console.log(typeof product, product)}
                                         <s-stack key={product?.id} border="base base" borderWidth="base none none" paddingInline="base">
                                             <div style={{ padding: "5px 0" }}>
                                                 <s-grid gridTemplateColumns="auto 1fr auto" gap="base" alignItems="center">
-                                                    <s-checkbox />
+                                                    <s-checkbox checked={isCheckedAllProduct} />
                                                     <s-clickable>
                                                         <div style={{ background: "#fff" }}>
                                                             <s-grid gridTemplateColumns="30px 1fr" gap="small" alignItems="center">
@@ -244,7 +423,7 @@ export default function DatabaseEdit() {
                                                             </s-grid>
                                                         </div>
                                                     </s-clickable>
-                                                    <s-button variant="tertiary" icon="delete" />
+                                                    <s-button variant="tertiary" icon="delete" onClick={()=> handleDeleteProduct({id: product?.id})} loading={isDeleting === product?.id} />
                                                 </s-grid>
                                             </div>
                                         </s-stack>
@@ -257,11 +436,10 @@ export default function DatabaseEdit() {
                             {collections.map((collection) => {
                                 return (
                                     <>
-                                        {console.log(typeof collection, collection)}
                                         <s-stack key={collection?.id} border="base base" borderWidth="base none none" paddingInline="base">
                                             <div style={{ padding: "5px 0" }}>
                                                 <s-grid gridTemplateColumns="auto 1fr auto" gap="base" alignItems="center">
-                                                    <s-checkbox />
+                                                    <s-checkbox checked={isCheckedAllCollection} />
                                                     <s-clickable>
                                                         <div style={{ background: "#fff" }}>
                                                             <s-grid gridTemplateColumns="30px 1fr" gap="small" alignItems="center">
@@ -272,7 +450,7 @@ export default function DatabaseEdit() {
                                                             </s-grid>
                                                         </div>
                                                     </s-clickable>
-                                                    <s-button variant="tertiary" icon="delete" />
+                                                    <s-button variant="tertiary" icon="delete" onClick={()=> handleDeleteCollection({id: collection?.id})} loading={isDeleting === collection?.id} />
                                                 </s-grid>
                                             </div>
                                         </s-stack>
