@@ -95,6 +95,7 @@ model SearchRow {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  @@unique([values, attachments])
   @@index([shopId])
 }
 
@@ -111,7 +112,7 @@ model RowValue {
   minValue      Int?
   maxValue      Int?
 
-  @@unique([rowId, fieldId])
+  @@unique([rowId, fieldId, value, minValue, maxValue])
   @@index([fieldId, value])
   @@index([fieldId, minValue, maxValue])
 }
@@ -143,8 +144,12 @@ model FilterSuggestion {
   fieldId       String
   field         Field     @relation(fields: [fieldId], references: [id], onDelete: Cascade)
 
-  value         String
+  value         String?
+  minValue      Int?
+  maxValue      Int?
   
-  @@unique([shopId, fieldId, value])
+  @@unique([shopId, fieldId, value, minValue, maxValue])
   @@index([shopId, fieldId])
 }
+
+// needs to redesign the database schema to accommodate the new feature of saving filter suggestions based on user interactions. The current schema has a FilterSuggestion model, but it may not be sufficient to capture the necessary data for generating personalized suggestions. We may need to add additional fields to track user interactions, such as click-through rates, conversion rates, and user preferences. Additionally, we may need to create new models to store this data and establish relationships between them and the existing models.

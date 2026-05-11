@@ -8,11 +8,11 @@ import CustomClickable from "../components/essentials/CustomClickable";
 import { useFetcher } from "react-router";
 export async function action({ request }) {
     await authenticate.admin(request);
-    const formData = await request.formData();
-    console.log("Form Data: ", formData);
-    // const shopId = formData.get("shopId");
-    // const type = formData.get("type");
-    return null;
+    const formData = await request.formData(); 
+    // console.log("Form Data: ", formData);
+    const { createRow } = await import("../utils/rows.server");
+    const response = await createRow({ data: Object.fromEntries(formData) });
+    return response;
 }
 
 export async function loader({ request }) {
@@ -93,7 +93,10 @@ export default function DatabaseEdit() {
                 ]
             });
             if (selected) {
-                setProducts(selected);
+                const newProducts = selected.map((product) => {
+                    return {id: product.id, title: product.title, image: product.images?.[0]?.originalSrc || null};
+                });
+                setProducts(newProducts);
                 handleChangeStatus();
             } else {
                 setProducts(products);
@@ -112,7 +115,10 @@ export default function DatabaseEdit() {
                 ]
             });
             if (selected) {
-                setCollections(selected)
+                const newCollections = selected.map((collection) => {
+                    return {id: collection.id, title: collection.title, image: collection?.image?.originalSrc || null};
+                })
+                setCollections(newCollections)
                 handleChangeStatus();
             } else {
                 setCollections(collections);
@@ -155,7 +161,6 @@ export default function DatabaseEdit() {
             setIsCheckedAllCollection(false);
         }
     }
-
     const handleTextFieldData = (e) => {
         const id = e.id;
         const value = e.value;
@@ -175,8 +180,6 @@ export default function DatabaseEdit() {
             setFieldData(newFieldData);
         }
     }
-
-
     const saveSuccessToat = () => {
         shopify.toast.show("Row added successfully");
     }
@@ -227,9 +230,8 @@ export default function DatabaseEdit() {
         setIsSaving("save");
         if(validateSubmitData()) return;
         const formData = new FormData();
-        formData.append('target', 'add');
         formData.append('type', addingRole);
-        formData.append('data', JSON.stringify(fieldData));
+        formData.append('fields', JSON.stringify(fieldData));
         formData.append('attachments', addingRole === "PRODUCT" ? JSON.stringify(products) : JSON.stringify(collections));
         formData.append('shopId', shopData.id);
         fetcher.submit(formData, {
@@ -242,9 +244,19 @@ export default function DatabaseEdit() {
         setIsSaving("saveNext");
         validateSubmitData();
     }
-
-    console.clear();
-    console.log("fieldData", fieldData);
+    useEffect(() => {
+        // if (fetcher.data?.success) {
+        //     saveSuccessToat();
+        //     setFieldData([]);
+        //     setProducts([]);
+        //     setCollections([]);
+        //     setIsCheckedAllProduct(false);
+        //     setIsCheckedAllCollection(false);
+        //     if(isSaving === "save") {
+        //         shopify.navigate("/app/database");
+        //     }
+        // }
+    }, [fetcher.data]);
     return (
         <s-page>
             <s-stack paddingBlock="base large">
@@ -322,7 +334,7 @@ export default function DatabaseEdit() {
                                                             <s-select
                                                                 label={`${field?.label} From`}
                                                                 placeholder={`Select ${field?.label?.toLowerCase()} from`}
-                                                                onChange={(e)=> {handleNumberFieldData({id: field?.id, minValue: e.currentTarget.value})}}
+                                                                onChange={(e)=> {handleNumberFieldData({id: field?.id, minValue: parseInt(e.currentTarget.value)})}}
                                                                 >
                                                                 {Array.from({ length: field?.rangeEnd - field?.rangeStart }, (_, index) => field?.rangeStart + index).map((year) => (
                                                                     <s-option key={year} value={year}>{year}</s-option>
@@ -333,7 +345,7 @@ export default function DatabaseEdit() {
                                                             <s-select
                                                                 label={`${field?.label} To`}
                                                                 placeholder={`Select ${field?.label?.toLowerCase()} to`}
-                                                                onChange={(e)=> {handleNumberFieldData({id: field?.id, maxValue: e.currentTarget.value})}}
+                                                                onChange={(e)=> {handleNumberFieldData({id: field?.id, maxValue: parseInt(e.currentTarget.value)})}}
                                                             >
                                                                 {Array.from({ length: field?.rangeEnd - field?.rangeStart }, (_, index) => field?.rangeStart + index).reverse().map((year) => (
                                                                     <s-option key={year} value={year}>{year}</s-option>
@@ -416,7 +428,7 @@ export default function DatabaseEdit() {
                                                     <s-clickable>
                                                         <div style={{ background: "#fff" }}>
                                                             <s-grid gridTemplateColumns="30px 1fr" gap="small" alignItems="center">
-                                                                <img style={{ width: "100%" }} src={product?.images?.[0]?.originalSrc ? product?.images?.[0]?.originalSrc : '/no-image-product.svg'} />
+                                                                <img style={{ width: "100%" }} src={product?.image || '/no-image-product.svg'} />
                                                                 <span style={{ textDecoration: "underline", color: "#0094d5" }}>
                                                                     {product?.title}
                                                                 </span>
