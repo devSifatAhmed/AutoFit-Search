@@ -8,7 +8,7 @@ CREATE TYPE "SortOrder" AS ENUM ('A_Z', 'Z_A', 'DB_ORDER', 'POPULARITY');
 CREATE TYPE "Visibility" AS ENUM ('VISIBLE', 'HIDDEN');
 
 -- CreateEnum
-CREATE TYPE "AttachmentType" AS ENUM ('PRODUCT', 'COLLECTION');
+CREATE TYPE "AttachmentMode" AS ENUM ('PRODUCT', 'COLLECTION');
 
 -- CreateTable
 CREATE TABLE "Session" (
@@ -49,6 +49,7 @@ CREATE TABLE "Shop" (
 CREATE TABLE "Field" (
     "id" TEXT NOT NULL,
     "shopId" TEXT NOT NULL,
+    "key" TEXT,
     "type" "FieldType" NOT NULL,
     "label" TEXT NOT NULL,
     "placeholder" TEXT,
@@ -67,6 +68,12 @@ CREATE TABLE "Field" (
 CREATE TABLE "SearchRow" (
     "id" TEXT NOT NULL,
     "shopId" TEXT NOT NULL,
+    "startYear" INTEGER NOT NULL,
+    "endYear" INTEGER NOT NULL,
+    "attachmentMode" "AttachmentMode" NOT NULL,
+    "filterSignature" TEXT,
+    "tag" TEXT,
+    "productTags" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -78,9 +85,7 @@ CREATE TABLE "RowValue" (
     "id" TEXT NOT NULL,
     "rowId" TEXT NOT NULL,
     "fieldId" TEXT NOT NULL,
-    "value" TEXT,
-    "minValue" INTEGER,
-    "maxValue" INTEGER,
+    "value" TEXT NOT NULL,
 
     CONSTRAINT "RowValue_pkey" PRIMARY KEY ("id")
 );
@@ -89,7 +94,6 @@ CREATE TABLE "RowValue" (
 CREATE TABLE "RowAttachment" (
     "id" TEXT NOT NULL,
     "rowId" TEXT NOT NULL,
-    "type" "AttachmentType" NOT NULL,
     "shopifyGid" TEXT NOT NULL,
 
     CONSTRAINT "RowAttachment_pkey" PRIMARY KEY ("id")
@@ -109,22 +113,37 @@ CREATE TABLE "FilterSuggestion" (
 CREATE UNIQUE INDEX "Shop_shopifyGid_key" ON "Shop"("shopifyGid");
 
 -- CreateIndex
-CREATE INDEX "Field_shopId_idx" ON "Field"("shopId");
+CREATE INDEX "Field_shopId_type_idx" ON "Field"("shopId", "type");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Field_shopId_id_key" ON "Field"("shopId", "id");
 
 -- CreateIndex
-CREATE INDEX "SearchRow_shopId_idx" ON "SearchRow"("shopId");
+CREATE UNIQUE INDEX "Field_shopId_key_key" ON "Field"("shopId", "key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Field_shopId_position_key" ON "Field"("shopId", "position");
+
+-- CreateIndex
+CREATE INDEX "SearchRow_shopId_startYear_endYear_idx" ON "SearchRow"("shopId", "startYear", "endYear");
+
+-- CreateIndex
+CREATE INDEX "SearchRow_shopId_filterSignature_idx" ON "SearchRow"("shopId", "filterSignature");
+
+-- CreateIndex
+CREATE INDEX "SearchRow_shopId_tag_idx" ON "SearchRow"("shopId", "tag");
 
 -- CreateIndex
 CREATE INDEX "RowValue_fieldId_value_idx" ON "RowValue"("fieldId", "value");
 
 -- CreateIndex
-CREATE INDEX "RowValue_fieldId_minValue_maxValue_idx" ON "RowValue"("fieldId", "minValue", "maxValue");
+CREATE INDEX "RowValue_rowId_fieldId_idx" ON "RowValue"("rowId", "fieldId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "RowValue_rowId_fieldId_key" ON "RowValue"("rowId", "fieldId");
+
+-- CreateIndex
+CREATE INDEX "RowAttachment_rowId_idx" ON "RowAttachment"("rowId");
 
 -- CreateIndex
 CREATE INDEX "RowAttachment_shopifyGid_idx" ON "RowAttachment"("shopifyGid");
@@ -133,7 +152,7 @@ CREATE INDEX "RowAttachment_shopifyGid_idx" ON "RowAttachment"("shopifyGid");
 CREATE UNIQUE INDEX "RowAttachment_rowId_shopifyGid_key" ON "RowAttachment"("rowId", "shopifyGid");
 
 -- CreateIndex
-CREATE INDEX "FilterSuggestion_shopId_fieldId_idx" ON "FilterSuggestion"("shopId", "fieldId");
+CREATE INDEX "FilterSuggestion_shopId_fieldId_value_idx" ON "FilterSuggestion"("shopId", "fieldId", "value");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "FilterSuggestion_shopId_fieldId_value_key" ON "FilterSuggestion"("shopId", "fieldId", "value");

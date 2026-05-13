@@ -40,38 +40,74 @@ const restrictToVerticalAxis = ({ transform }) => ({
 export async function action({request}) {
     const { admin } = await authenticate.admin(request);
     const { createField, editField, deleteField, reorderFields} = await import("../utils/fields.server");
+    const { deleteRow } = await import("../utils/rows.server");
+    const { syncStorefrontConfig } = await import("../utils/storefrontConfig.server");
+    const prisma = (await import("../db.server.js")).default;
     const formData = await request.formData();
     const target = formData.get('target');
     const shopId = formData.get('shopId');
-    if(target === 'field'){
-        const type = formData.get('type');
-        const field = formData.get('field');
-        if(type === 'add'){
-            const newField = JSON.parse(field);
-            const fields = await createField({admin, shopId, field: newField});
-            console.log("Successfully added a new field...", fields);
-            return { fields };
-        }else if(type === 'edit'){
-            const newField = JSON.parse(field);
-            const fields = await editField({admin, shopId, field: newField});
-            console.log("Successfully edited a field...", fields);
-            return { fields };
-        }else if(type === 'delete'){
-            const fields = await deleteField({admin, shopId, field });
-            console.log("Successfully deleted a field...", fields);
-            return { fields };
-        }else if(type === 'reorder'){
-            const fieldIds = JSON.parse(field);
-            const fields = await reorderFields({shopId, fieldIds});
-            console.log("Successfully reordered fields...", fields);
-            return { fields };
-        }else{
-            console.log("Wrong type submitted to field target...");
+
+    try {
+        if(target === 'field'){
+            const type = formData.get('type');
+            const field = formData.get('field');
+            let fields;
+
+            if(type === 'add'){
+                const newField = JSON.parse(field);
+                fields = await createField({admin, shopId, field: newField});
+            }else if(type === 'edit'){
+                const newField = JSON.parse(field);
+                fields = await editField({admin, shopId, field: newField});
+            }else if(type === 'delete'){
+                fields = await deleteField({admin, shopId, field });
+            }else if(type === 'reorder'){
+                const fieldIds = JSON.parse(field);
+                fields = await reorderFields({shopId, fieldIds});
+            } else {
+                throw new Error("Wrong type submitted to field target");
+            }
+
+            await syncStorefrontConfig(admin, shopId);
+            return { success: true, fields };
         }
-    }else{
-        console.log("Wrong target submitted...");
+
+        if (target === "row") {
+            const type = formData.get("type");
+
+            if (type === "delete") {
+                const rowId = formData.get("rowId");
+                await deleteRow({ admin, shopId, rowId });
+                await syncStorefrontConfig(admin, shopId);
+
+                return { success: true, deletedRowId: rowId };
+            }
+
+            if (type === "clear") {
+                const rows = await prisma.searchRow.findMany({
+                    where: { shopId },
+                    include: { attachments: true },
+                });
+
+                for (const row of rows) {
+                    await deleteRow({ admin, shopId, rowId: row.id });
+                }
+
+                await syncStorefrontConfig(admin, shopId);
+                return { success: true, cleared: true };
+            }
+
+            throw new Error("Wrong type submitted to row target");
+        }
+
+        throw new Error("Wrong target submitted");
+    } catch (error) {
+        console.error("Database action failed", error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Something went wrong",
+        };
     }
-    return null;
 }
 
 function SortableFieldRow({
@@ -206,7 +242,7 @@ export default function Database() {
     // managing data from loader start 
     const { fields: loadedFields, rows: loadedRows, shopData } = useLoaderData();
     const [fields, setFields] = useState(loadedFields);
-    const [rows] = useState(loadedRows);
+    const [rows, setRows] = useState(loadedRows);
     // managing data from loader end
 
     const fetcher = useFetcher();
@@ -271,6 +307,29 @@ export default function Database() {
                 });
             }
         }
+        if (event.target === "row") {
+            const type = event.value.type;
+            const rowId = event.value.data;
+
+            setPendingFieldAction({
+                type: `row-${type}`,
+                fieldId: rowId,
+            });
+
+            const formData = new FormData();
+            formData.append("target", "row");
+            formData.append("type", type);
+            formData.append("shopId", shopData.id);
+
+            if (rowId) {
+                formData.append("rowId", rowId);
+            }
+
+            fetcher.submit(formData, {
+                method: "post",
+                action: "/app/database",
+            });
+        }
         // events about field add, edit & delete end
     }
     const handleFieldDragStart = (event) => {
@@ -316,13 +375,29 @@ export default function Database() {
     // handling callback response from field modal & updating end
     useEffect(() => {
         if (fetcher.state === "idle" && fetcher.data) {
+            if (fetcher.data.error) {
+                shopify.toast.show(fetcher.data.error, {
+                    isError: true,
+                    duration: 4000,
+                });
+                setPendingFieldAction(null);
+                setSaveProgress(false);
+                return;
+            }
+
             if (fetcher.data.fields) {
                 setFields(fetcher.data.fields);
+            }
+            if (fetcher.data.deletedRowId) {
+                setRows((currentRows) => currentRows.filter((row) => row.id !== fetcher.data.deletedRowId));
+            }
+            if (fetcher.data.cleared) {
+                setRows([]);
             }
             if (pendingFieldAction) {
                 setSaveProgress(false);
 
-                if (!["delete", "reorder"].includes(pendingFieldAction.type)) {
+                if (!["delete", "reorder", "row-delete", "row-clear"].includes(pendingFieldAction.type)) {
                     shopify.modal.hide("field-modal");
                 }
 
@@ -332,6 +407,10 @@ export default function Database() {
                         ? "Field updated successfully"
                         : pendingFieldAction.type === "delete"
                             ? "Field deleted successfully"
+                            : pendingFieldAction.type === "row-delete"
+                                ? "Row deleted successfully"
+                                : pendingFieldAction.type === "row-clear"
+                                    ? "Database cleared successfully"
                             : "Field order updated successfully";
 
                 shopify.toast.show(message, { duration: 3000 });
@@ -372,8 +451,8 @@ export default function Database() {
                         <s-stack direction="inline" gap="small" justifyContent="end" alignItems="center">
                             <s-button commandFor="more-action-menu" variant="secondary">More actions</s-button>
                             <s-menu id="more-action-menu" accessibilityLabel="More actions">
-                                <s-button icon="plus-circle">Add search entry</s-button>
-                                <s-button icon="delete">Clear database</s-button>
+                                <s-button icon="plus-circle" href="/app/database/add">Add search entry</s-button>
+                                <s-button icon="delete" tone="critical" onClick={() => handleUpdate({ target: "row", value: { type: "clear", data: null } })}>Clear database</s-button>
                             </s-menu>
 
                             <s-button variant="secondary" icon="download">Download data backup</s-button>
@@ -506,10 +585,10 @@ export default function Database() {
 
                                                 <s-menu id={`customer-menu__${row.id}`} accessibilityLabel="Customer actions">
                                                     <s-section heading="Actions">
-                                                        <s-button icon="edit">Edit row</s-button>
+                                                        <s-button icon="edit" href={`/app/database/edit/${row.id}`}>Edit row</s-button>
                                                         {/* <s-button icon="duplicate">Duplicate row</s-button> */}
                                                     </s-section>
-                                                    <s-button tone="critical" icon="delete">Delete customer</s-button>
+                                                    <s-button tone="critical" icon="delete" onClick={() => handleUpdate({ target: "row", value: { type: "delete", data: row.id } })}>Delete row</s-button>
                                                 </s-menu>
                                             </s-stack>
                                         </s-table-cell>

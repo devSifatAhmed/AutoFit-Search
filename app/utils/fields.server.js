@@ -1,17 +1,83 @@
 import prisma from "../db.server.js";
 import { validateShop } from "./validate_shop.server.js";
 
+function slugifyKey(value) {
+    return String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .replace(/_+/g, "_") || "field";
+}
+
 function normalizeField(field) {
     const type = field?.type || "SELECT";
+    const normalizedLabel = String(field?.label || "Field").trim() || "Field";
+    const normalizedRangeStart = type === "RANGE" ? Number(field?.rangeStart ?? 1970) : null;
+    const normalizedRangeEnd = type === "RANGE" ? Number(field?.rangeEnd ?? 2026) : null;
 
     return {
         type,
-        label: field?.label || "Field",
+        label: normalizedLabel,
         placeholder: field?.placeholder || null,
         visibility: field?.visibility || field?.labelVisibility || "VISIBLE",
         sortOrder: field?.sortOrder || field?.sortby || "A_Z",
-        rangeStart: type === "RANGE" ? Number(field?.rangeStart || 1970) : null,
-        rangeEnd: type === "RANGE" ? Number(field?.rangeEnd || 2026) : null,
+        rangeStart: normalizedRangeStart,
+        rangeEnd: normalizedRangeEnd,
+    };
+}
+
+async function validateFieldInput({ shopId, field, existingFieldId = null }) {
+    const normalizedField = normalizeField(field);
+    const fieldKey = field?.key || slugifyKey(normalizedField.label);
+
+    if (!normalizedField.label) {
+        throw new Error("Field label is required");
+    }
+
+    const existingKeyField = await prisma.field.findFirst({
+        where: {
+            shopId,
+            key: fieldKey,
+            ...(existingFieldId ? { id: { not: existingFieldId } } : {}),
+        },
+        select: {
+            id: true,
+        },
+    });
+
+    if (existingKeyField) {
+        throw new Error("Field key already exists for this shop");
+    }
+
+    if (normalizedField.type === "RANGE") {
+        if (!Number.isInteger(normalizedField.rangeStart) || !Number.isInteger(normalizedField.rangeEnd)) {
+            throw new Error("Range fields must use valid integer bounds");
+        }
+
+        if (normalizedField.rangeStart > normalizedField.rangeEnd) {
+            throw new Error("Range start must be less than or equal to range end");
+        }
+
+        const existingRangeField = await prisma.field.findFirst({
+            where: {
+                shopId,
+                type: "RANGE",
+                ...(existingFieldId ? { id: { not: existingFieldId } } : {}),
+            },
+            select: {
+                id: true,
+            },
+        });
+
+        if (existingRangeField) {
+            throw new Error("Only one range field is allowed per shop");
+        }
+    }
+
+    return {
+        ...normalizedField,
+        key: fieldKey,
     };
 }
 
@@ -75,11 +141,12 @@ export async function createField({ admin, shopId, field }) {
         await validateShop(admin);
     }
 
+    const normalizedField = await validateFieldInput({ shopId, field });
     const fields = await normalizeFieldPositions(shopId);
 
     await prisma.field.create({
         data: {
-            ...normalizeField(field),
+            ...normalizedField,
             shopId,
             position: fields.length,
         },
@@ -89,11 +156,29 @@ export async function createField({ admin, shopId, field }) {
 }
 
 export async function editField({ shopId, field }) {
+    const existingField = await prisma.field.findUnique({
+        where: {
+            id: field.id,
+        },
+        select: {
+            key: true,
+        },
+    });
+
+    const normalizedField = await validateFieldInput({
+        shopId,
+        field: {
+            ...field,
+            key: existingField?.key,
+        },
+        existingFieldId: field.id,
+    });
+
     await prisma.field.update({
         where: {
             id: field.id,
         },
-        data: normalizeField(field),
+        data: normalizedField,
     });
 
     return listFields({shopId});

@@ -45,6 +45,7 @@ model Field {
   shopId        String
   shop          Shop      @relation(fields: [shopId], references:[shopifyGid], onDelete: Cascade)
 
+  key           String?
   type          FieldType
   label         String
   placeholder   String?
@@ -63,8 +64,9 @@ model Field {
   updatedAt     DateTime  @updatedAt
 
   @@unique([shopId, id])
+  @@unique([shopId, key])
   @@unique([shopId, position])
-  @@index([shopId])
+  @@index([shopId, type])
 }
 
 enum FieldType {
@@ -89,14 +91,22 @@ model SearchRow {
   shopId        String
   shop          Shop      @relation(fields: [shopId], references:[shopifyGid], onDelete: Cascade)
 
+  startYear     Int
+  endYear       Int
+  attachmentMode AttachmentMode
+  filterSignature String?
+  tag           String?
+  productTags   String[]   @default([])
+
   values        RowValue[]
   attachments   RowAttachment[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  @@unique([values, attachments])
-  @@index([shopId])
+  @@index([shopId, startYear, endYear])
+  @@index([shopId, filterSignature])
+  @@index([shopId, tag])
 }
 
 model RowValue {
@@ -108,13 +118,11 @@ model RowValue {
   fieldId       String
   field         Field     @relation(fields: [fieldId], references: [id], onDelete: Cascade)
 
-  value         String?
-  minValue      Int?
-  maxValue      Int?
+  value         String
 
-  @@unique([rowId, fieldId, value, minValue, maxValue])
+  @@unique([rowId, fieldId])
   @@index([fieldId, value])
-  @@index([fieldId, minValue, maxValue])
+  @@index([rowId, fieldId])
 }
 
 model RowAttachment {
@@ -123,16 +131,11 @@ model RowAttachment {
   rowId         String
   row           SearchRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
 
-  type          AttachmentType
   shopifyGid    String
 
   @@unique([rowId, shopifyGid])
+  @@index([rowId])
   @@index([shopifyGid])
-}
-
-enum AttachmentType {
-  PRODUCT
-  COLLECTION
 }
 
 model FilterSuggestion {
@@ -144,12 +147,13 @@ model FilterSuggestion {
   fieldId       String
   field         Field     @relation(fields: [fieldId], references: [id], onDelete: Cascade)
 
-  value         String?
-  minValue      Int?
-  maxValue      Int?
+  value         String
   
-  @@unique([shopId, fieldId, value, minValue, maxValue])
-  @@index([shopId, fieldId])
+  @@unique([shopId, fieldId, value])
+  @@index([shopId, fieldId, value])
 }
 
-// needs to redesign the database schema to accommodate the new feature of saving filter suggestions based on user interactions. The current schema has a FilterSuggestion model, but it may not be sufficient to capture the necessary data for generating personalized suggestions. We may need to add additional fields to track user interactions, such as click-through rates, conversion rates, and user preferences. Additionally, we may need to create new models to store this data and establish relationships between them and the existing models.
+enum AttachmentMode {
+  PRODUCT
+  COLLECTION
+}

@@ -32,7 +32,7 @@ export default function Index() {
                 Search form allows customers to find products by selecting criteria like year, make, and model.
               </s-paragraph>
               <s-box borderRadius='base' overflow='hidden' border='base' padding='small'>
-                <img src='/dashboard-main-widget.svg' />
+                <img src='/dashboard-main-widget.svg' alt="" />
               </s-box>
             </s-stack>
             <s-divider />
