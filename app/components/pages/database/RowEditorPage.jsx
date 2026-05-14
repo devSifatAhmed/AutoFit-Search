@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useState } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useNavigate } from "react-router";
 import Loader from "../../essentials/Loader";
 import Section from "../../essentials/Section";
 import Text from "../../essentials/Text";
@@ -34,6 +34,7 @@ export default function RowEditorPage({
     submitPath,
     rowId = null,
 }) {
+    const navigate = useNavigate();
     const fetcher = useFetcher();
     const [addingRole, setAddingRole] = useState(initialAttachmentMode || "PRODUCT");
     const [products, setProducts] = useState(initialAttachmentMode === "PRODUCT" ? (initialAttachments || []) : []);
@@ -203,7 +204,9 @@ export default function RowEditorPage({
             shopify.toast.show(mode === "edit" ? "Row updated successfully" : "Row added successfully");
 
             if (mode === "edit" || isSaving === "save") {
-                shopify.navigate("/app/database");
+                setTimeout(() => {
+                    navigate("/app/database");
+                }, 500)
             } else {
                 setFieldData(buildInitialFieldData(fields));
                 setProducts([]);
