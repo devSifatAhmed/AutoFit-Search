@@ -1,0 +1,18 @@
+[data-section-type="auto-fit-search"] .autofit-w-container {
+    max-width: var(--autofit-w-container-max-width, 100%);
+    width: 100%;
+    padding: var(--autofit-w-container-padding, 0px);
+    margin: 0 auto;
+}
+[data-section-type="auto-fit-search"] .autofit-w-heading{
+    margin: 12px 0;
+}
+[data-section-type="auto-fit-search"].center .autofit-w-header{
+    text-align: center;
+}
+[data-section-type="auto-fit-search"].left .autofit-w-header{
+    text-align: start;
+}
+[data-section-type="auto-fit-search"].right .autofit-w-header{
+    text-align: end;
+}

@@ -1,11 +1,10 @@
-{% assign app_data = app.metafields.autofit_search.fields.value %}
 <script>
-    window.autoFitConfig = {{ app_data | json }};
     window.autoFitEnabled = true;
 </script>
 {% schema %}
 {
     "name": "AutoFit Search",
-    "target": "head"
+    "target": "head",
+    "stylesheet": "style.css"
 }
 {% endschema %}
