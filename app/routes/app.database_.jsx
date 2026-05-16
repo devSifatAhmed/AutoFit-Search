@@ -571,7 +571,7 @@ export default function Database() {
                                             </s-table-cell>
                                         ))}
                                         <s-table-cell>
-                                            <s-clickable href="#">
+                                            <s-clickable href={`/app/database/edit/${row.id}`}>
                                                 <div style={{ display: "flex", alignItems: "center", color: "#0094d5", gap: "4px" }}>
                                                     <s-icon type={row?.role} tone="info" />
                                                     {row?.attachments?.length + ` `}

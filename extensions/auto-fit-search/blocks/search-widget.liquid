@@ -1,15 +1,28 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", ()=>{
-        const windowData = window.autoFitConfig ? window.autoFitConfig : null;
-        if(windowData !== null){
-            console.log("AutoFit Search app embeded...");
-            console.log("AutoFit Search config data: ", windowData);
-        }else{
-            console.log("AutoFit Search app not embeded yet...");
-        }
+        const windowData = window.autoFitConfig || null;
+        const enabled = window.autoFitEnabled || false;
+        setTimeout(()=> {
+            console.clear();
+            if(enabled) {
+                console.log("AutoFit Search is enabled. Configuration:");
+
+                if(windowData !== null) {
+                    console.log("Configuration data:", windowData);
+                }else {
+                    console.log("No configuration data found.");
+                }
+            } else {
+                console.log("AutoFit Search is disabled.");
+            }
+        }, 1500);
     });
 </script>
+
+<div id="autofit-search-widget_{{ block.id }}">
+    <h2>Hello, World!</h2>
+</div>
 
 {% schema %}
 {
