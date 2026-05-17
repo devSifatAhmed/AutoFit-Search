@@ -1,11 +1,14 @@
 {% assign fields = app.metafields.autofit_search.fields.value %}
 {% assign rows = app.metafields.autofit_search.rows.value %}
 {% assign suggestions = app.metafields.autofit_search.suggestions.value %}
+{% assign visible_fields = fields | where: "visibility", "VISIBLE" %}
+{% assign enable_history = true %}
 {% assign class_prefix = "autofit-w" %}
 <div
     id="autofit-search-widget_{{ block.id }}"
     data-section-type="auto-fit-search"
     data-block-id="{{ block.id }}"
+    data-enable-history="{{ enable_history }}"
     class="auto-fit-search-widget {{ block.settings.text_alignment }}"
     {% if block.settings.enable_container %}style="
         --{{ class_prefix }}-container-max-width: {{ block.settings.container_max_width }}px;
@@ -31,20 +34,18 @@
 
         <!-- Search form start -->
         <div class="{{ class_prefix }}-form__wrapper">
-            <form id="{{ block.id }}-form" style="--grid-cols: {{ fields | size }};" class="{{ class_prefix }}-form">
+            <form id="{{ block.id }}-form" style="--grid-cols: {{ visible_fields | size }};" class="{{ class_prefix }}-form">
                 <div class="{{ class_prefix }}-fields">
-                    {% for field in fields %}
-                        {% if field.visibility == "VISIBLE" %}
-                            <div class="{{ class_prefix }}-field" data-index="{{ forloop.index0 }}" data-field-name="{{ field.label }}">
-                                <select name="{{ field.key }}" id="{{ field.id }}" class="{{ class_prefix }}-select" required disabled>
-                                    <option value="" disabled selected>{{ field.placeholder }}</option>
-                                </select>
-                            </div>
-                        {% endif %}
+                    {% for field in visible_fields %}
+                        <div class="{{ class_prefix }}-field" data-index="{{ forloop.index0 }}" data-field-name="{{ field.label }}">
+                            <select name="{{ field.key }}" id="{{ field.id }}_{{ block.id }}" class="{{ class_prefix }}-select" required disabled>
+                                <option value="" disabled selected>{{ field.placeholder }}</option>
+                            </select>
+                        </div>
                     {% endfor %}
                     <div class="{{ class_prefix }}-field" data-field-name="buttons">
-                        <button type="button" class="{{ class_prefix }}-search" id="{{ class_prefix }}-search">Search</button>
-                        <button type="reset" class="{{ class_prefix }}-clear" id="{{ class_prefix }}-clear">Clear filters</button>
+                        <button type="button" class="{{ class_prefix }}-search" id="{{ class_prefix }}-search_{{ block.id }}">Search</button>
+                        <button type="button" class="{{ class_prefix }}-clear" id="{{ class_prefix }}-clear_{{ block.id }}">Clear filters</button>
                     </div>
                 </div>
             </form>
@@ -54,28 +55,51 @@
 </div>
 
 <script>
-    document.addEventListener("DOMContentLoaded", ()=>{
-        console.clear();
-        
-        const enabled = window.autoFitEnabled || false;
-        const widets = document.querySelectorAll("[data-section-type='auto-fit-search']");
-        if(enabled) {
-            window.fields = {{ fields | json }};
-            window.rows = {{ rows | json }};
-            window.suggestions = {{ suggestions | json }};
-            const event = new CustomEvent("autoFitSearch:initialized", {
-                detail: {
-                    blockId: "{{ block.id }}"
-                }
-            });
-            document.dispatchEvent(event);
-            console.log("Rows:", window.rows);
-        } else {
-            widets.forEach(widget => {
+    (function() {
+        const blockId = "{{ block.id }}";
+        const fields = {{ fields | json }} || [];
+        const rows = {{ rows | json }} || [];
+        const suggestions = {{ suggestions | json }} || [];
+        const enableHistory = {{ enable_history | json }};
+
+        function initializeAutoFitWidget() {
+            const enabled = window.autoFitEnabled || false;
+            const widget = document.getElementById("autofit-search-widget_{{ block.id }}");
+
+            if(enabled) {
+                window.autoFitSearchWidgets = window.autoFitSearchWidgets || {};
+                window.autoFitSearchWidgets[blockId] = {
+                    blockId,
+                    fields,
+                    rows,
+                    suggestions,
+                    enableHistory
+                };
+                window.fields = fields;
+                window.rows = rows;
+                window.suggestions = suggestions;
+
+                const event = new CustomEvent("autoFitSearch:initialized", {
+                    detail: {
+                        blockId,
+                        fields,
+                        rows,
+                        suggestions,
+                        enableHistory
+                    }
+                });
+                document.dispatchEvent(event);
+            } else if(widget) {
                 widget.innerHTML = "<p style='color: red;'>AutoFit Search is disabled. Please enable it in the settings.</p>";
-            });
+            }
         }
-    });
+
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", initializeAutoFitWidget, { once: true });
+        } else {
+            initializeAutoFitWidget();
+        }
+    })();
 </script>
 
 

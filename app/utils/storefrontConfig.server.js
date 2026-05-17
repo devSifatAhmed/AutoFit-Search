@@ -57,6 +57,94 @@ function mapSuggestion(suggestion) {
     };
 }
 
+function getCollectionAttachmentIds(storefrontConfig) {
+    return Array.from(new Set(
+        (storefrontConfig?.rows || [])
+            .filter((row) => row.attachmentMode === "COLLECTION")
+            .flatMap((row) => row.attachments || [])
+            .map((attachment) => attachment.id)
+            .filter(Boolean),
+    ));
+}
+
+async function fetchCollectionAttachmentHandles(admin, collectionIds) {
+    if (!admin || collectionIds.length === 0) {
+        return new Map();
+    }
+
+    const response = await admin.graphql(
+        `#graphql
+        query CollectionAttachmentHandles($ids: [ID!]!) {
+          nodes(ids: $ids) {
+            id
+            ... on Collection {
+              handle
+              title
+            }
+          }
+        }`,
+        {
+            variables: {
+                ids: collectionIds,
+            },
+        },
+    );
+
+    const json = await response.json();
+    const errors = json?.errors || [];
+
+    if (errors.length > 0) {
+        throw new Error(errors[0].message || "Unable to load collection handles");
+    }
+
+    return new Map(
+        (json?.data?.nodes || [])
+            .filter((node) => node?.id && node?.handle)
+            .map((node) => [
+                node.id,
+                {
+                    handle: node.handle,
+                    title: node.title || null,
+                },
+            ]),
+    );
+}
+
+export async function hydrateCollectionAttachmentHandles(admin, storefrontConfig) {
+    const collectionIds = getCollectionAttachmentIds(storefrontConfig);
+    const collectionsById = await fetchCollectionAttachmentHandles(admin, collectionIds);
+
+    if (collectionsById.size === 0) {
+        return storefrontConfig;
+    }
+
+    return {
+        ...storefrontConfig,
+        rows: storefrontConfig.rows.map((row) => {
+            if (row.attachmentMode !== "COLLECTION") {
+                return row;
+            }
+
+            return {
+                ...row,
+                attachments: row.attachments.map((attachment) => {
+                    const collection = collectionsById.get(attachment.id);
+
+                    if (!collection) {
+                        return attachment;
+                    }
+
+                    return {
+                        ...attachment,
+                        handle: collection.handle,
+                        title: collection.title,
+                    };
+                }),
+            };
+        }),
+    };
+}
+
 export async function buildStorefrontConfig(shopId) {
     const [fields, rows, suggestions] = await Promise.all([
         prisma.field.findMany({
@@ -120,7 +208,10 @@ export function buildStorefrontMetafields(ownerId, storefrontConfig) {
 
 export async function syncStorefrontConfig(admin, shopId) {
     const ownerId = await getCurrentAppInstallation(admin);
-    const storefrontConfig = await buildStorefrontConfig(shopId);
+    const storefrontConfig = await hydrateCollectionAttachmentHandles(
+        admin,
+        await buildStorefrontConfig(shopId),
+    );
 
     const response = await admin.graphql(
         `#graphql
