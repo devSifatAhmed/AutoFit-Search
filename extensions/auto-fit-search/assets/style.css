@@ -16,3 +16,43 @@
 [data-section-type="auto-fit-search"].right .autofit-w-header{
     text-align: end;
 }
+[data-section-type="auto-fit-search"] .autofit-w-form__wrapper{
+    width: 100%;
+    padding: 20px;
+}
+[data-section-type="auto-fit-search"] .autofit-w-fields{
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 15px;
+}
+[data-section-type="auto-fit-search"] .autofit-w-field select {
+    width: 100%;
+    padding: 10px 15px;
+    font-size: 14px;
+    outline: none;
+    box-shadow: none;
+    appearance: none;
+    border-radius: 0;
+    border: 1px solid #ccc;
+}
+[data-section-type="auto-fit-search"] .autofit-w-field[data-field-name="buttons"]{
+    display: flex;
+    justify-content: stretch;
+    gap: 15px;
+}
+[data-section-type="auto-fit-search"] .autofit-w-field[data-field-name="buttons"] button{
+    width: 100%;
+    outline: none;
+    padding: 9px 15px;
+    font-size: 14px;
+    border-radius: 0 !important;
+    border: 1px solid #ccc;
+    cursor: pointer;
+    background: #000;
+    color: #fff;
+    transition: 0.15s ease-in-out;
+}
+[data-section-type="auto-fit-search"] .autofit-w-field[data-field-name="buttons"] button:hover{
+    background: #333;
+}

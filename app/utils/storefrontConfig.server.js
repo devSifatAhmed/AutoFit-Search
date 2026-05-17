@@ -2,7 +2,8 @@ import prisma from "../db.server.js";
 import { getCurrentAppInstallation } from "./currentAppInstallation.server.js";
 
 const METAFIELD_NAMESPACE = "autofit_search";
-const PRIMARY_METAFIELD_KEY = "fields";
+const FIELDS_METAFIELD_KEY = "fields";
+const ROWS_METAFIELD_KEY = "rows";
 const SUGGESTIONS_METAFIELD_KEY = "suggestions";
 
 function resolveFieldKey(field) {
@@ -91,11 +92,35 @@ export async function buildStorefrontConfig(shopId) {
     };
 }
 
+export function buildStorefrontMetafields(ownerId, storefrontConfig) {
+    return [
+        {
+            ownerId,
+            namespace: METAFIELD_NAMESPACE,
+            key: FIELDS_METAFIELD_KEY,
+            type: "json",
+            value: JSON.stringify(storefrontConfig.fields),
+        },
+        {
+            ownerId,
+            namespace: METAFIELD_NAMESPACE,
+            key: ROWS_METAFIELD_KEY,
+            type: "json",
+            value: JSON.stringify(storefrontConfig.rows),
+        },
+        {
+            ownerId,
+            namespace: METAFIELD_NAMESPACE,
+            key: SUGGESTIONS_METAFIELD_KEY,
+            type: "json",
+            value: JSON.stringify(storefrontConfig.suggestions),
+        },
+    ];
+}
+
 export async function syncStorefrontConfig(admin, shopId) {
     const ownerId = await getCurrentAppInstallation(admin);
     const storefrontConfig = await buildStorefrontConfig(shopId);
-    const serializedConfig = JSON.stringify(storefrontConfig);
-    const serializedSuggestions = JSON.stringify(storefrontConfig.suggestions);
 
     const response = await admin.graphql(
         `#graphql
@@ -114,22 +139,7 @@ export async function syncStorefrontConfig(admin, shopId) {
         }`,
         {
             variables: {
-                metafields: [
-                    {
-                        ownerId,
-                        namespace: METAFIELD_NAMESPACE,
-                        key: PRIMARY_METAFIELD_KEY,
-                        type: "json",
-                        value: serializedConfig,
-                    },
-                    {
-                        ownerId,
-                        namespace: METAFIELD_NAMESPACE,
-                        key: SUGGESTIONS_METAFIELD_KEY,
-                        type: "json",
-                        value: serializedSuggestions,
-                    },
-                ],
+                metafields: buildStorefrontMetafields(ownerId, storefrontConfig),
             },
         },
     );

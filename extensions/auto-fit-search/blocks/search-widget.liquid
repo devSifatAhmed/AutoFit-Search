@@ -1,5 +1,6 @@
-{% assign app_data = app.metafields.autofit_search.fields.value %}
-{% assign fields = app_data.fields | json %}
+{% assign fields = app.metafields.autofit_search.fields.value %}
+{% assign rows = app.metafields.autofit_search.rows.value %}
+{% assign suggestions = app.metafields.autofit_search.suggestions.value %}
 {% assign class_prefix = "autofit-w" %}
 <div
     id="autofit-search-widget_{{ block.id }}"
@@ -30,22 +31,21 @@
 
         <!-- Search form start -->
         <div class="{{ class_prefix }}-form__wrapper">
-            <form id="{{ block.id }}-form">
-
+            <form id="{{ block.id }}-form" style="--grid-cols: {{ fields | size }};" class="{{ class_prefix }}-form">
                 <div class="{{ class_prefix }}-fields">
                     {% for field in fields %}
-                        {% assign field = field | json %}
-                        <pre style="padding: 10px;">
-                            {{ field[1] }}
-                        </pre>
-                        {% comment %} {% if field.visibility == "VISIBLE" %}
-                            <div class="{{ class_prefix }}-field" data-index="{{ forloop.index0 }}" data-field-name="{{ field.name }}">
-                                <select name="make" id="{{ block.id }}" class="{{ class_prefix }}-select" required>
-                                    <option value="" disabled selected>Select Make</option>
+                        {% if field.visibility == "VISIBLE" %}
+                            <div class="{{ class_prefix }}-field" data-index="{{ forloop.index0 }}" data-field-name="{{ field.label }}">
+                                <select name="{{ field.key }}" id="{{ field.id }}" class="{{ class_prefix }}-select" required>
+                                    <option value="" disabled selected>{{ field.placeholder }}</option>
                                 </select>
                             </div>
-                        {% endif %} {% endcomment %}
+                        {% endif %}
                     {% endfor %}
+                    <div class="{{ class_prefix }}-field" data-field-name="buttons">
+                        <button type="button" class="{{ class_prefix }}-search">Search</button>
+                        <button type="reset" class="{{ class_prefix }}-clear">Clear filters</button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -60,7 +60,11 @@
         const enabled = window.autoFitEnabled || false;
         const widets = document.querySelectorAll("[data-section-type='auto-fit-search']");
         if(enabled) {
-            const data = {{ app_data | json }};
+            const data = {
+                fields: {{ fields | json }},
+                rows: {{ rows | json }},
+                suggestions: {{ suggestions | json }},
+            };
             console.log("AutoFit Data:", data);
         } else {
             widets.forEach(widget => {

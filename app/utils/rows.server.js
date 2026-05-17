@@ -32,10 +32,68 @@ export function hasYearRangeOverlap(existingRange, nextRange) {
         && existingRange.endYear >= nextRange.startYear;
 }
 
-function buildFilterSignature(selectValues, fieldMap) {
+export function buildFilterSignature(selectValues, fieldMap) {
     return selectValues
         .map(({ fieldId, value }) => `${resolveFieldKey(fieldMap.get(fieldId))}:${normalizeSignatureValue(value)}`)
         .join("|");
+}
+
+export async function rebuildRowFilterSignatures(shopId, client = prisma) {
+    const fields = await client.field.findMany({
+        where: {
+            shopId,
+            type: "SELECT",
+        },
+        orderBy: [
+            { position: "asc" },
+        ],
+    });
+    const fieldMap = new Map(fields.map((field) => [field.id, field]));
+    const rows = await client.searchRow.findMany({
+        where: {
+            shopId,
+        },
+        include: {
+            values: true,
+        },
+    });
+
+    let updatedCount = 0;
+
+    for (const row of rows) {
+        const valueMap = new Map(row.values.map((value) => [value.fieldId, value.value]));
+        const orderedSelectValues = fields
+            .map((field) => {
+                const value = valueMap.get(field.id);
+
+                if (!value) {
+                    return null;
+                }
+
+                return {
+                    fieldId: field.id,
+                    value,
+                };
+            })
+            .filter(Boolean);
+        const nextSignature = buildFilterSignature(orderedSelectValues, fieldMap);
+
+        if (row.filterSignature === nextSignature) {
+            continue;
+        }
+
+        await client.searchRow.update({
+            where: {
+                id: row.id,
+            },
+            data: {
+                filterSignature: nextSignature,
+            },
+        });
+        updatedCount += 1;
+    }
+
+    return updatedCount;
 }
 
 async function listRows(shopId) {

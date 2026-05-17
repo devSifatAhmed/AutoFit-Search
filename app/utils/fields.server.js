@@ -1,4 +1,5 @@
 import prisma from "../db.server.js";
+import { rebuildRowFilterSignatures } from "./rows.server.js";
 import { validateShop } from "./validate_shop.server.js";
 
 function slugifyKey(value) {
@@ -230,6 +231,8 @@ export async function reorderFields({ shopId, fieldIds }) {
                 },
             });
         }
+
+        await rebuildRowFilterSignatures(shopId, tx);
     });
 
     return listFields({shopId});

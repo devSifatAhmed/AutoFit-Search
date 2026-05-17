@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import prisma from "../app/db.server.js";
 import { buildProductTags } from "../app/utils/productTags.server.js";
 import { hasYearRangeOverlap } from "../app/utils/rows.server.js";
+import { buildStorefrontMetafields } from "../app/utils/storefrontConfig.server.js";
 import { getAvailableOptions, getMatchingRows, getSearchResults } from "../app/utils/storefrontSearch.server.js";
 
 test("buildProductTags creates one tag per field value and one tag per year", () => {
@@ -99,6 +100,28 @@ test("storefront search utilities return matching rows and cascading options", (
             attachments: [{ id: "gid://shopify/Product/1" }],
         },
     ]);
+});
+
+test("storefront sync writes fields, rows, and suggestions into separate metafields", () => {
+    const ownerId = "gid://shopify/AppInstallation/123";
+    const storefrontConfig = {
+        fields: [{ id: "field-1", key: "brand" }],
+        rows: [{ id: "row-1", filterSignature: "brand:ford" }],
+        suggestions: [{ id: "suggestion-1", key: "brand", value: "FORD" }],
+        updatedAt: "2026-05-17T00:00:00.000Z",
+    };
+
+    const metafields = buildStorefrontMetafields(ownerId, storefrontConfig);
+    const valuesByKey = Object.fromEntries(
+        metafields.map((metafield) => [metafield.key, JSON.parse(metafield.value)]),
+    );
+
+    assert.deepEqual(metafields.map((metafield) => metafield.key), ["fields", "rows", "suggestions"]);
+    assert.equal(metafields.every((metafield) => metafield.ownerId === ownerId), true);
+    assert.equal(metafields.every((metafield) => metafield.namespace === "autofit_search"), true);
+    assert.deepEqual(valuesByKey.fields, storefrontConfig.fields);
+    assert.deepEqual(valuesByKey.rows, storefrontConfig.rows);
+    assert.deepEqual(valuesByKey.suggestions, storefrontConfig.suggestions);
 });
 
 test.after(async () => {
