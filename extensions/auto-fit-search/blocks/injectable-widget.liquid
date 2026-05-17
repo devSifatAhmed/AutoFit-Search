@@ -1,0 +1,157 @@
+<script>
+    (function() {
+        const blockId = "injectable-widget-{{ block.id }}";
+        const fields = {{ app.metafields.autofit_search.fields.value | json }} || [];
+        const rows = {{ app.metafields.autofit_search.rows.value | json }} || [];
+        const suggestions = {{ app.metafields.autofit_search.suggestions.value | json }} || [];
+        const widgetConfig = {
+            blockId,
+            widgetType: "injectable",
+            selector: {{ block.settings.injection_selector | json }},
+            injectionPosition: {{ block.settings.injection_position | json }},
+            fields,
+            rows,
+            suggestions,
+            enableHistory: {{ block.settings.enable_history | json }},
+            heading: {{ block.settings.heading | json }},
+            description: {{ block.settings.description | json }},
+            textAlignment: {{ block.settings.text_alignment | json }},
+            enableContainer: {{ block.settings.enable_container | json }},
+            containerMaxWidth: {{ block.settings.container_max_width | json }},
+            containerPadding: {{ block.settings.container_padding | json }},
+            searchButtonLabel: {{ block.settings.search_button_label | json }},
+            clearButtonLabel: {{ block.settings.clear_button_label | json }}
+        };
+
+        window.autoFitWidgetConfigs = window.autoFitWidgetConfigs || {};
+        window.autoFitWidgetConfigs[blockId] = widgetConfig;
+
+        document.dispatchEvent(new CustomEvent("autoFitSearch:renderWidgets", {
+            detail: widgetConfig
+        }));
+    })();
+</script>
+{% schema %}
+{
+    "name": "AutoFit Search Inject",
+    "target": "head",
+    "settings": [
+        {
+            "type": "header",
+            "content": "Injection"
+        },
+        {
+            "type": "text",
+            "id": "injection_selector",
+            "label": "Injection selector",
+            "info": "Use a CSS selector like #fitment-search or .fitment-search. If you enter a plain name, the app tries both ID and class."
+        },
+        {
+            "type": "select",
+            "id": "injection_position",
+            "label": "Injection position",
+            "default": "append",
+            "options": [
+                {
+                    "value": "append",
+                    "label": "Append as last child"
+                },
+                {
+                    "value": "prepend",
+                    "label": "Prepend as first child"
+                }
+            ]
+        },
+        {
+            "type": "checkbox",
+            "id": "enable_history",
+            "label": "Enable history",
+            "default": true
+        },
+        {
+            "type": "header",
+            "content": "Content"
+        },
+        {
+            "type": "text",
+            "id": "heading",
+            "label": "Heading",
+            "default": "Find Your Engine That Fits"
+        },
+        {
+            "type": "richtext",
+            "id": "description",
+            "label": "Description",
+            "default": "<p>Find the perfect compatible engine for your vehicle quickly, reliably, and confidently with our advanced search.</p>"
+        },
+        {
+            "type": "select",
+            "id": "text_alignment",
+            "label": "Text alignment",
+            "default": "center",
+            "options": [
+                {
+                    "value": "left",
+                    "label": "Left"
+                },
+                {
+                    "value": "center",
+                    "label": "Center"
+                },
+                {
+                    "value": "right",
+                    "label": "Right"
+                }
+            ]
+        },
+        {
+            "type": "header",
+            "content": "Buttons"
+        },
+        {
+            "type": "text",
+            "id": "search_button_label",
+            "label": "Search button label",
+            "default": "Search"
+        },
+        {
+            "type": "text",
+            "id": "clear_button_label",
+            "label": "Clear button label",
+            "default": "Clear filters"
+        },
+        {
+            "type": "header",
+            "content": "Container"
+        },
+        {
+            "type": "checkbox",
+            "id": "enable_container",
+            "label": "Enable container styling",
+            "default": false
+        },
+        {
+            "id": "container_max_width",
+            "type": "range",
+            "label": "Container max width (px)",
+            "default": 1200,
+            "min": 800,
+            "max": 2000,
+            "step": 50,
+            "unit": "px",
+            "visible_if": "{{ block.settings.enable_container }}"
+        },
+        {
+            "id": "container_padding",
+            "type": "range",
+            "label": "Container padding (px)",
+            "default": 20,
+            "min": 0,
+            "max": 100,
+            "step": 5,
+            "unit": "px",
+            "visible_if": "{{ block.settings.enable_container }}"
+        }
+    ]
+}
+{% endschema %}
