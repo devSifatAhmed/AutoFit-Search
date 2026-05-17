@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import prisma from "../app/db.server.js";
 import { buildProductTags } from "../app/utils/productTags.server.js";
 import { hasYearRangeOverlap } from "../app/utils/rows.server.js";
-import { buildStorefrontMetafields } from "../app/utils/storefrontConfig.server.js";
+import { buildStorefrontMetafields, hydrateCollectionAttachmentHandles } from "../app/utils/storefrontConfig.server.js";
 import { getAvailableOptions, getMatchingRows, getSearchResults } from "../app/utils/storefrontSearch.server.js";
 
 test("buildProductTags creates one tag per field value and one tag per year", () => {
@@ -122,6 +122,57 @@ test("storefront sync writes fields, rows, and suggestions into separate metafie
     assert.deepEqual(valuesByKey.fields, storefrontConfig.fields);
     assert.deepEqual(valuesByKey.rows, storefrontConfig.rows);
     assert.deepEqual(valuesByKey.suggestions, storefrontConfig.suggestions);
+});
+
+test("storefront config hydration adds collection handles to collection attachments", async () => {
+    const admin = {
+        graphql: async (query, options) => {
+            assert.match(query, /CollectionAttachmentHandles/);
+            assert.deepEqual(options.variables.ids, ["gid://shopify/Collection/1"]);
+
+            return {
+                json: async () => ({
+                    data: {
+                        nodes: [
+                            {
+                                id: "gid://shopify/Collection/1",
+                                handle: "ford-edge-fitments",
+                                title: "Ford Edge Fitments",
+                            },
+                        ],
+                    },
+                }),
+            };
+        },
+    };
+    const storefrontConfig = {
+        fields: [],
+        rows: [
+            {
+                id: "row-1",
+                attachmentMode: "COLLECTION",
+                attachments: [{ id: "gid://shopify/Collection/1" }],
+            },
+            {
+                id: "row-2",
+                attachmentMode: "PRODUCT",
+                attachments: [{ id: "gid://shopify/Product/1" }],
+            },
+        ],
+        suggestions: [],
+        updatedAt: "2026-05-17T00:00:00.000Z",
+    };
+
+    const hydratedConfig = await hydrateCollectionAttachmentHandles(admin, storefrontConfig);
+
+    assert.deepEqual(hydratedConfig.rows[0].attachments, [
+        {
+            id: "gid://shopify/Collection/1",
+            handle: "ford-edge-fitments",
+            title: "Ford Edge Fitments",
+        },
+    ]);
+    assert.deepEqual(hydratedConfig.rows[1].attachments, storefrontConfig.rows[1].attachments);
 });
 
 test.after(async () => {
