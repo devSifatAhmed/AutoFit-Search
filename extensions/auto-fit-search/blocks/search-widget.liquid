@@ -36,15 +36,15 @@
                     {% for field in fields %}
                         {% if field.visibility == "VISIBLE" %}
                             <div class="{{ class_prefix }}-field" data-index="{{ forloop.index0 }}" data-field-name="{{ field.label }}">
-                                <select name="{{ field.key }}" id="{{ field.id }}" class="{{ class_prefix }}-select" required>
+                                <select name="{{ field.key }}" id="{{ field.id }}" class="{{ class_prefix }}-select" required disabled>
                                     <option value="" disabled selected>{{ field.placeholder }}</option>
                                 </select>
                             </div>
                         {% endif %}
                     {% endfor %}
                     <div class="{{ class_prefix }}-field" data-field-name="buttons">
-                        <button type="button" class="{{ class_prefix }}-search">Search</button>
-                        <button type="reset" class="{{ class_prefix }}-clear">Clear filters</button>
+                        <button type="button" class="{{ class_prefix }}-search" id="{{ class_prefix }}-search">Search</button>
+                        <button type="reset" class="{{ class_prefix }}-clear" id="{{ class_prefix }}-clear">Clear filters</button>
                     </div>
                 </div>
             </form>
@@ -60,12 +60,16 @@
         const enabled = window.autoFitEnabled || false;
         const widets = document.querySelectorAll("[data-section-type='auto-fit-search']");
         if(enabled) {
-            const data = {
-                fields: {{ fields | json }},
-                rows: {{ rows | json }},
-                suggestions: {{ suggestions | json }},
-            };
-            console.log("AutoFit Data:", data);
+            window.fields = {{ fields | json }};
+            window.rows = {{ rows | json }};
+            window.suggestions = {{ suggestions | json }};
+            const event = new CustomEvent("autoFitSearch:initialized", {
+                detail: {
+                    blockId: "{{ block.id }}"
+                }
+            });
+            document.dispatchEvent(event);
+            console.log("Rows:", window.rows);
         } else {
             widets.forEach(widget => {
                 widget.innerHTML = "<p style='color: red;'>AutoFit Search is disabled. Please enable it in the settings.</p>";

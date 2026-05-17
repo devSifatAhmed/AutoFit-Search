@@ -1,0 +1,168 @@
+// rows data
+[
+    {
+        "id": "167c5511-a744-4c9c-8b82-5e818e25264e",
+        "attachmentMode": "PRODUCT",
+        "startYear": 2015,
+        "endYear": 2018,
+        "filterSignature": "brand:ford|model:edge",
+        "values": [
+            {
+                "fieldId": "fa98b953-8c36-422d-8535-3aa56f2ecd6b",
+                "key": "brand",
+                "value": "FORD"
+            },
+            {
+                "fieldId": "72fd3e2f-9644-48f5-9e8b-3317c1b0f21f",
+                "key": "model",
+                "value": "EDGE"
+            }
+        ],
+        "attachments": [
+            {
+                "id": "gid://shopify/Product/8245140652102"
+            },
+            {
+                "id": "gid://shopify/Product/8245140979782"
+            },
+            {
+                "id": "gid://shopify/Product/8245141143622"
+            }
+        ]
+    },
+    {
+        "id": "04565f08-92d9-4df6-8381-488dd136f103",
+        "attachmentMode": "PRODUCT",
+        "startYear": 2013,
+        "endYear": 2018,
+        "filterSignature": "brand:ford|model:escape",
+        "values": [
+            {
+                "fieldId": "fa98b953-8c36-422d-8535-3aa56f2ecd6b",
+                "key": "brand",
+                "value": "FORD"
+            },
+            {
+                "fieldId": "72fd3e2f-9644-48f5-9e8b-3317c1b0f21f",
+                "key": "model",
+                "value": "ESCAPE"
+            }
+        ],
+        "attachments": [
+            {
+                "id": "gid://shopify/Product/8245140848710"
+            },
+            {
+                "id": "gid://shopify/Product/8245140783174"
+            }
+        ]
+    },
+    {
+        "id": "17f532bb-b0a0-4d45-92db-30d56687767d",
+        "attachmentMode": "PRODUCT",
+        "startYear": 2013,
+        "endYear": 2018,
+        "filterSignature": "brand:ford|model:focus",
+        "values": [
+            {
+                "fieldId": "fa98b953-8c36-422d-8535-3aa56f2ecd6b",
+                "key": "brand",
+                "value": "FORD"
+            },
+            {
+                "fieldId": "72fd3e2f-9644-48f5-9e8b-3317c1b0f21f",
+                "key": "model",
+                "value": "FOCUS"
+            }
+        ],
+        "attachments": [
+            {
+                "id": "gid://shopify/Product/8245140684870"
+            },
+            {
+                "id": "gid://shopify/Product/8245140750406"
+            }
+        ]
+    },
+    {
+        "id": "845715e8-23ee-4f5b-bda0-ad4adc569b5f",
+        "attachmentMode": "PRODUCT",
+        "startYear": 2013,
+        "endYear": 2016,
+        "filterSignature": "brand:ford|model:fusion",
+        "values": [
+            {
+                "fieldId": "fa98b953-8c36-422d-8535-3aa56f2ecd6b",
+                "key": "brand",
+                "value": "FORD"
+            },
+            {
+                "fieldId": "72fd3e2f-9644-48f5-9e8b-3317c1b0f21f",
+                "key": "model",
+                "value": "FUSION"
+            }
+        ],
+        "attachments": [
+            {
+                "id": "gid://shopify/Product/8245141012550"
+            },
+            {
+                "id": "gid://shopify/Product/8245140717638"
+            }
+        ]
+    },
+    {
+        "id": "05d79100-620c-4ae6-814a-22c1132eaccb",
+        "attachmentMode": "PRODUCT",
+        "startYear": 2012,
+        "endYear": 2019,
+        "filterSignature": "brand:hyundai|model:accent",
+        "values": [
+            {
+                "fieldId": "fa98b953-8c36-422d-8535-3aa56f2ecd6b",
+                "key": "brand",
+                "value": "HYUNDAI"
+            },
+            {
+                "fieldId": "72fd3e2f-9644-48f5-9e8b-3317c1b0f21f",
+                "key": "model",
+                "value": "ACCENT"
+            }
+        ],
+        "attachments": [
+            {
+                "id": "gid://shopify/Product/8245141045318"
+            },
+            {
+                "id": "gid://shopify/Product/8245141110854"
+            }
+        ]
+    },
+    {
+        "id": "705e0b27-14b7-4026-b80f-abc7556126dc",
+        "attachmentMode": "PRODUCT",
+        "startYear": 2010,
+        "endYear": 2024,
+        "filterSignature": "brand:kia|model:forte",
+        "values": [
+            {
+                "fieldId": "fa98b953-8c36-422d-8535-3aa56f2ecd6b",
+                "key": "brand",
+                "value": "KIA"
+            },
+            {
+                "fieldId": "72fd3e2f-9644-48f5-9e8b-3317c1b0f21f",
+                "key": "model",
+                "value": "FORTE"
+            }
+        ],
+        "attachments": [
+            {
+                "id": "gid://shopify/Product/8245140881478"
+            },
+            {
+                "id": "gid://shopify/Product/8245140914246"
+            }
+        ]
+    }
+]
