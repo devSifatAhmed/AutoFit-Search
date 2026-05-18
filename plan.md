@@ -238,3 +238,16 @@ Fields should cascade according to configured order:
 - Widgets with different field structures use different storage scopes, so unrelated widgets do not overwrite each other.
 - Restoring history on page load now updates only the form state and storage/same-page sync; it does not write query params into the current URL.
 - Query params are added only to the explicit search destination URL.
+- Clear/reset now also broadcasts a global reset signal, so injected widgets and section widgets reset together even if their storage scopes differ.
+
+## Injectable Widget Addendum
+
+- `app-embed.liquid` stays as the original lightweight head embed: it only enables AutoFit and loads CSS/JS.
+- `injectable-widget.liquid` is a separate head block dedicated to injection.
+- `injectable-widget.liquid` does not include CSS/JS assets again; the initial `app-embed.liquid` block owns asset loading.
+- `injectable-widget.liquid` does not overwrite global field/row/suggestion variables; it registers only its own injection config.
+- `AutoFit Search Inject` accepts an injection selector such as `#fitment-search` or `.fitment-search`.
+- Every matched element receives a child AutoFit Search widget.
+- The app also tries both ID and class when a plain selector name is entered.
+- Injected widgets use the same storefront engine, history sync, product tag redirects, and collection handle redirects as section widgets.
+- `script.js` is minified so the theme app block JavaScript asset stays below Shopify's 10KB theme-check threshold.
