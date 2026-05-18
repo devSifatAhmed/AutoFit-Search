@@ -127,6 +127,14 @@ function getChoiceListValue(event) {
     return Array.isArray(values) ? values[0] || "" : values;
 }
 
+function getCheckboxChecked(event) {
+    return Boolean(
+        event?.currentTarget?.checked
+        ?? event?.target?.checked
+        ?? event?.detail?.checked
+    );
+}
+
 function normalizeAttachmentMode(value) {
     const normalizedValue = normalizeFilterText(value);
 
@@ -186,6 +194,27 @@ export async function action({request}) {
                 await syncStorefrontConfig(admin, shopId);
 
                 return { success: true, deletedRowId: rowId };
+            }
+
+            if (type === "bulk-delete") {
+                const rowIds = JSON.parse(formData.get("rowIds") || "[]");
+
+                if (!Array.isArray(rowIds) || rowIds.length === 0) {
+                    throw new Error("No rows selected");
+                }
+
+                const uniqueRowIds = [...new Set(rowIds.map((rowId) => String(rowId || "").trim()).filter(Boolean))];
+
+                if (uniqueRowIds.length === 0) {
+                    throw new Error("No rows selected");
+                }
+
+                for (const rowId of uniqueRowIds) {
+                    await deleteRow({ admin, shopId, rowId });
+                }
+
+                await syncStorefrontConfig(admin, shopId);
+                return { success: true, deletedRowIds: uniqueRowIds };
             }
 
             if (type === "clear") {
@@ -376,6 +405,7 @@ export default function Database() {
     const [fieldFilters, setFieldFilters] = useState({});
     const [attachmentFilter, setAttachmentFilter] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
+    const [selectedRowIds, setSelectedRowIds] = useState([]);
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {
@@ -431,11 +461,13 @@ export default function Database() {
         }
         if (event.target === "row") {
             const type = event.value.type;
-            const rowId = event.value.data;
+            const rowData = event.value.data;
+            const isBulkDelete = type === "bulk-delete";
+            const rowIds = Array.isArray(rowData) ? rowData : [];
 
             setPendingFieldAction({
                 type: `row-${type}`,
-                fieldId: rowId,
+                fieldId: isBulkDelete ? rowIds.join(",") : rowData,
             });
 
             const formData = new FormData();
@@ -443,8 +475,10 @@ export default function Database() {
             formData.append("type", type);
             formData.append("shopId", shopData.id);
 
-            if (rowId) {
-                formData.append("rowId", rowId);
+            if (isBulkDelete) {
+                formData.append("rowIds", JSON.stringify(rowIds));
+            } else if (rowData) {
+                formData.append("rowId", rowData);
             }
 
             fetcher.submit(formData, {
@@ -513,6 +547,12 @@ export default function Database() {
     const totalPages = Math.max(1, Math.ceil(filteredRows.length / ROWS_PER_PAGE));
     const pageStartIndex = (currentPage - 1) * ROWS_PER_PAGE;
     const paginatedRows = filteredRows.slice(pageStartIndex, pageStartIndex + ROWS_PER_PAGE);
+    const selectedRowIdSet = useMemo(() => new Set(selectedRowIds), [selectedRowIds]);
+    const visibleRowIds = useMemo(() => paginatedRows.map((row) => row.id), [paginatedRows]);
+    const hasSelectedRows = selectedRowIds.length > 0;
+    const hasVisibleRows = visibleRowIds.length > 0;
+    const isEveryVisibleRowSelected = hasVisibleRows && visibleRowIds.every((rowId) => selectedRowIdSet.has(rowId));
+    const isSomeVisibleRowSelected = hasVisibleRows && visibleRowIds.some((rowId) => selectedRowIdSet.has(rowId));
     const visibleStart = filteredRows.length > 0 ? pageStartIndex + 1 : 0;
     const visibleEnd = Math.min(pageStartIndex + paginatedRows.length, filteredRows.length);
     const normalizedAttachmentFilter = normalizeAttachmentMode(attachmentFilter);
@@ -562,6 +602,40 @@ export default function Database() {
     const handleNextPage = () => {
         setCurrentPage((page) => Math.min(totalPages, page + 1));
     };
+    const handleToggleRowSelection = (rowId, checked) => {
+        setSelectedRowIds((currentRowIds) => {
+            if (checked) {
+                return currentRowIds.includes(rowId)
+                    ? currentRowIds
+                    : [...currentRowIds, rowId];
+            }
+
+            return currentRowIds.filter((currentRowId) => currentRowId !== rowId);
+        });
+    };
+    const handleToggleVisibleRowsSelection = (checked) => {
+        setSelectedRowIds((currentRowIds) => {
+            if (checked) {
+                return [...new Set([...currentRowIds, ...visibleRowIds])];
+            }
+
+            const visibleRowIdSet = new Set(visibleRowIds);
+            return currentRowIds.filter((rowId) => !visibleRowIdSet.has(rowId));
+        });
+    };
+    const handleDeleteSelectedRows = () => {
+        if (!hasSelectedRows) {
+            return;
+        }
+
+        handleUpdate({
+            target: "row",
+            value: {
+                type: "bulk-delete",
+                data: selectedRowIds,
+            },
+        });
+    };
     // handling callback response from field modal & updating end
     useEffect(() => {
         const fieldIds = new Set(fields.map((field) => field.id));
@@ -579,6 +653,17 @@ export default function Database() {
     useEffect(() => {
         setCurrentPage((page) => Math.min(Math.max(page, 1), totalPages));
     }, [totalPages]);
+    useEffect(() => {
+        const rowIdSet = new Set(rows.map((row) => row.id));
+
+        setSelectedRowIds((currentRowIds) => {
+            const nextRowIds = currentRowIds.filter((rowId) => rowIdSet.has(rowId));
+
+            return nextRowIds.length === currentRowIds.length
+                ? currentRowIds
+                : nextRowIds;
+        });
+    }, [rows]);
     useEffect(() => {
         if (fetcher.state === "idle" && fetcher.data) {
             if (fetcher.data.error) {
@@ -599,14 +684,21 @@ export default function Database() {
             }
             if (fetcher.data.deletedRowId) {
                 setRows((currentRows) => currentRows.filter((row) => row.id !== fetcher.data.deletedRowId));
+                setSelectedRowIds((currentRowIds) => currentRowIds.filter((rowId) => rowId !== fetcher.data.deletedRowId));
+            }
+            if (fetcher.data.deletedRowIds) {
+                const deletedRowIdSet = new Set(fetcher.data.deletedRowIds);
+                setRows((currentRows) => currentRows.filter((row) => !deletedRowIdSet.has(row.id)));
+                setSelectedRowIds((currentRowIds) => currentRowIds.filter((rowId) => !deletedRowIdSet.has(rowId)));
             }
             if (fetcher.data.cleared) {
                 setRows([]);
+                setSelectedRowIds([]);
             }
             if (pendingFieldAction) {
                 setSaveProgress(false);
 
-                if (!["delete", "reorder", "row-delete", "row-clear"].includes(pendingFieldAction.type)) {
+                if (!["delete", "reorder", "row-delete", "row-bulk-delete", "row-clear"].includes(pendingFieldAction.type)) {
                     shopify.modal.hide("field-modal");
                 }
 
@@ -618,8 +710,10 @@ export default function Database() {
                             ? "Field deleted successfully"
                             : pendingFieldAction.type === "row-delete"
                                 ? "Row deleted successfully"
-                                : pendingFieldAction.type === "row-clear"
-                                    ? "Database cleared successfully"
+                                : pendingFieldAction.type === "row-bulk-delete"
+                                    ? "Selected rows deleted successfully"
+                                    : pendingFieldAction.type === "row-clear"
+                                        ? "Database cleared successfully"
                             : "Field order updated successfully";
 
                 shopify.toast.show(message, { duration: 3000 });
@@ -738,7 +832,17 @@ export default function Database() {
                         </s-grid>
                     </s-box>
                     <s-stack direction="inline" gap="small" alignItems="center">
-                        <s-button variant="primary" tone="critical">Delete selected</s-button>
+                        {hasSelectedRows && (
+                            <s-button
+                                variant="primary"
+                                tone="critical"
+                                loading={pendingFieldAction?.type === "row-bulk-delete" && fetcher.state !== "idle"}
+                                disabled={fetcher.state !== "idle"}
+                                onClick={handleDeleteSelectedRows}
+                            >
+                                Delete selected
+                            </s-button>
+                        )}
                         <s-button variant="primary" href="/app/database/add">Add search entry</s-button>
                     </s-stack>
                 </s-stack>
@@ -750,7 +854,12 @@ export default function Database() {
                                 <s-table-header>
                                     <s-grid gridTemplateColumns="30px 1fr" alignItems="center">
                                         <div style={{ height: "25px" }}></div>
-                                        <s-checkbox />
+                                        <s-checkbox
+                                            checked={isEveryVisibleRowSelected}
+                                            indeterminate={isSomeVisibleRowSelected && !isEveryVisibleRowSelected}
+                                            disabled={!hasVisibleRows}
+                                            onChange={(event) => handleToggleVisibleRowsSelection(getCheckboxChecked(event))}
+                                        />
                                     </s-grid>
                                 </s-table-header>
                                 {fields.map((field) => {
@@ -847,7 +956,11 @@ export default function Database() {
                                         <s-table-cell>
                                             <s-grid gridTemplateColumns="30px 1fr">
                                                 <div style={{ padding: "0 5px" }}>{pageStartIndex + index + 1}</div>
-                                                <s-checkbox value={row?.id} />
+                                                <s-checkbox
+                                                    value={row?.id}
+                                                    checked={selectedRowIdSet.has(row.id)}
+                                                    onChange={(event) => handleToggleRowSelection(row.id, getCheckboxChecked(event))}
+                                                />
                                             </s-grid>
                                         </s-table-cell>
                                         {fields.map((field) => (
