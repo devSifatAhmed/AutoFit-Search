@@ -21,7 +21,7 @@ import { CSS } from "@dnd-kit/utilities";
 import Loader from '../components/essentials/Loader'
 import Text from '../components/essentials/Text'
 import Section from '../components/essentials/Section'
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getRows } from "../utils/rows.server";
 import { getShopData } from "../utils/shopData.server";
 import { authenticate } from "../shopify.server";
@@ -36,6 +36,110 @@ const restrictToVerticalAxis = ({ transform }) => ({
     ...transform,
     x: 0,
 });
+
+const ROWS_PER_PAGE = 15;
+
+function normalizeFilterText(value) {
+    return String(value || "").trim().toLowerCase();
+}
+
+function parseRangeColumn(value) {
+    const match = String(value || "")
+        .trim()
+        .match(/^(-?\d+)\s*(?:(?:-|\u2013|\u2014)\s*(-?\d+))?$/);
+
+    if (!match) {
+        return null;
+    }
+
+    const startValue = Number(match[1]);
+    const endValue = Number(match[2] || match[1]);
+
+    if (!Number.isInteger(startValue) || !Number.isInteger(endValue)) {
+        return null;
+    }
+
+    return {
+        minValue: Math.min(startValue, endValue),
+        maxValue: Math.max(startValue, endValue),
+    };
+}
+
+function isSingleInteger(value) {
+    return /^-?\d+$/.test(String(value || "").trim());
+}
+
+function isRangeLikeValue(value) {
+    return /^-?\d+\s*(?:(?:-|\u2013|\u2014)\s*-?\d+)?$/.test(String(value || "").trim());
+}
+
+function isRangeColumnValue({ field, value }) {
+    return field.type === "RANGE" || /^-?\d+\s*(?:-|\u2013|\u2014)\s*-?\d+$/.test(String(value || "").trim());
+}
+
+function rangesOverlap(existingRange, nextRange) {
+    return existingRange.minValue <= nextRange.maxValue
+        && existingRange.maxValue >= nextRange.minValue;
+}
+
+function valueMatchesFieldFilter({ field, value, filterValue }) {
+    const normalizedFilter = normalizeFilterText(filterValue);
+
+    if (!normalizedFilter) {
+        return true;
+    }
+
+    const normalizedValue = normalizeFilterText(value);
+    const shouldUseRangeMatch = isRangeColumnValue({ field, value: normalizedValue });
+
+    if (shouldUseRangeMatch && isSingleInteger(normalizedFilter)) {
+        const rangeValue = parseRangeColumn(value);
+        const numericFilter = Number(normalizedFilter);
+
+        return Boolean(rangeValue)
+            && rangeValue.minValue <= numericFilter
+            && rangeValue.maxValue >= numericFilter;
+    }
+
+    if (shouldUseRangeMatch && isRangeLikeValue(normalizedFilter)) {
+        const rangeValue = parseRangeColumn(value);
+        const filterRange = parseRangeColumn(normalizedFilter);
+
+        return Boolean(rangeValue && filterRange) && rangesOverlap(rangeValue, filterRange);
+    }
+
+    return normalizedValue.includes(normalizedFilter);
+}
+
+function getInputValue(event) {
+    return event?.currentTarget?.value ?? event?.target?.value ?? "";
+}
+
+function getChoiceListValue(event) {
+    const values = event?.currentTarget?.values
+        ?? event?.target?.values
+        ?? event?.detail?.values
+        ?? event?.detail?.value
+        ?? event?.currentTarget?.value
+        ?? event?.target?.value
+        ?? [];
+
+    return Array.isArray(values) ? values[0] || "" : values;
+}
+
+function normalizeAttachmentMode(value) {
+    const normalizedValue = normalizeFilterText(value);
+
+    if (["product", "products"].includes(normalizedValue)) {
+        return "PRODUCT";
+    }
+
+    if (["collection", "collections"].includes(normalizedValue)) {
+        return "COLLECTION";
+    }
+
+    return "";
+}
 
 export async function action({request}) {
     const { admin } = await authenticate.admin(request);
@@ -269,6 +373,9 @@ export default function Database() {
     const [pendingFieldAction, setPendingFieldAction] = useState(null);
     const [activeFieldId, setActiveFieldId] = useState(null);
     const [overFieldId, setOverFieldId] = useState(null);
+    const [fieldFilters, setFieldFilters] = useState({});
+    const [attachmentFilter, setAttachmentFilter] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {
@@ -387,7 +494,91 @@ export default function Database() {
         setOverFieldId(null);
     };
     const activeField = fields.find((field) => field.id === activeFieldId);
+    const filteredRows = useMemo(() => (rows || []).filter((row) => {
+        const fieldsMatch = fields.every((field) => valueMatchesFieldFilter({
+            field,
+            value: row?.columns?.[field.id] || "",
+            filterValue: fieldFilters[field.id],
+        }));
+
+        if (!fieldsMatch) {
+            return false;
+        }
+
+        const selectedAttachmentMode = normalizeAttachmentMode(attachmentFilter);
+
+        return !selectedAttachmentMode
+            || normalizeAttachmentMode(row?.attachmentMode || row?.role) === selectedAttachmentMode;
+    }), [rows, fields, fieldFilters, attachmentFilter]);
+    const totalPages = Math.max(1, Math.ceil(filteredRows.length / ROWS_PER_PAGE));
+    const pageStartIndex = (currentPage - 1) * ROWS_PER_PAGE;
+    const paginatedRows = filteredRows.slice(pageStartIndex, pageStartIndex + ROWS_PER_PAGE);
+    const visibleStart = filteredRows.length > 0 ? pageStartIndex + 1 : 0;
+    const visibleEnd = Math.min(pageStartIndex + paginatedRows.length, filteredRows.length);
+    const normalizedAttachmentFilter = normalizeAttachmentMode(attachmentFilter);
+    const hasAttachmentFilter = Boolean(normalizedAttachmentFilter);
+    const hasFilters = Boolean(
+        hasAttachmentFilter
+        || Object.values(fieldFilters).some((filterValue) => normalizeFilterText(filterValue)),
+    );
+    const handleFieldFilterChange = ({ fieldId, value }) => {
+        setFieldFilters((currentFilters) => {
+            const nextFilters = { ...currentFilters };
+
+            if (normalizeFilterText(value)) {
+                nextFilters[fieldId] = value;
+            } else {
+                delete nextFilters[fieldId];
+            }
+
+            return nextFilters;
+        });
+        setCurrentPage(1);
+    };
+    const clearFieldFilter = (fieldId) => {
+        setFieldFilters((currentFilters) => {
+            const nextFilters = { ...currentFilters };
+            delete nextFilters[fieldId];
+            return nextFilters;
+        });
+        setCurrentPage(1);
+    };
+    const handleAttachmentFilterChange = (value) => {
+        setAttachmentFilter(normalizeAttachmentMode(value));
+        setCurrentPage(1);
+    };
+    const clearAttachmentFilter = () => {
+        setAttachmentFilter("");
+        setCurrentPage(1);
+    };
+    const clearAllTableFilters = () => {
+        setFieldFilters({});
+        setAttachmentFilter("");
+        setCurrentPage(1);
+    };
+    const handlePreviousPage = () => {
+        setCurrentPage((page) => Math.max(1, page - 1));
+    };
+    const handleNextPage = () => {
+        setCurrentPage((page) => Math.min(totalPages, page + 1));
+    };
     // handling callback response from field modal & updating end
+    useEffect(() => {
+        const fieldIds = new Set(fields.map((field) => field.id));
+
+        setFieldFilters((currentFilters) => {
+            const nextFilters = Object.fromEntries(
+                Object.entries(currentFilters).filter(([fieldId]) => fieldIds.has(fieldId)),
+            );
+
+            return Object.keys(nextFilters).length === Object.keys(currentFilters).length
+                ? currentFilters
+                : nextFilters;
+        });
+    }, [fields]);
+    useEffect(() => {
+        setCurrentPage((page) => Math.min(Math.max(page, 1), totalPages));
+    }, [totalPages]);
     useEffect(() => {
         if (fetcher.state === "idle" && fetcher.data) {
             if (fetcher.data.error) {
@@ -546,9 +737,10 @@ export default function Database() {
                             </s-paragraph>
                         </s-grid>
                     </s-box>
-                    <s-box>
+                    <s-stack direction="inline" gap="small" alignItems="center">
+                        <s-button variant="primary" tone="critical">Delete selected</s-button>
                         <s-button variant="primary" href="/app/database/add">Add search entry</s-button>
-                    </s-box>
+                    </s-stack>
                 </s-stack>
 
                 <s-stack paddingBlockStart="large">
@@ -561,13 +753,86 @@ export default function Database() {
                                         <s-checkbox />
                                     </s-grid>
                                 </s-table-header>
-                                {fields.map((field, index) => (
-                                    <s-table-header key={index}>
-                                        {field.label}
+                                {fields.map((field) => {
+                                    const filterValue = fieldFilters[field.id] || "";
+                                    const hasFieldFilter = Boolean(normalizeFilterText(filterValue));
+
+                                    return (
+                                    <s-table-header key={field.id}>
+                                        <s-grid gridTemplateColumns="1fr auto" alignItems="center">
+                                            {field.label}
+                                            <s-button
+                                                variant="tertiary"
+                                                icon={hasFieldFilter ? "filter-active" : "filter"}
+                                                commandFor={`filter_${field.id}`}
+                                                command="--toggle"
+                                            />
+                                            <s-popover id={`filter_${field.id}`} inlineSize="220px">
+                                                <s-grid padding="base" gap="small" gridTemplateColumns="170px">
+                                                    <s-text-field
+                                                        label=""
+                                                        placeholder={`Filter ${field.label}...`}
+                                                        autocomplete="off"
+                                                        value={filterValue}
+                                                        onInput={(event) => handleFieldFilterChange({ fieldId: field.id, value: getInputValue(event) })}
+                                                        onChange={(event) => handleFieldFilterChange({ fieldId: field.id, value: getInputValue(event) })}
+                                                    />
+                                                    <s-button
+                                                        variant="secondary"
+                                                        disabled={!hasFieldFilter}
+                                                        onClick={() => clearFieldFilter(field.id)}
+                                                    >
+                                                        <div style={{width: "146px", textAlign: "center"}}>Clear filter</div>
+                                                    </s-button>
+                                                </s-grid>
+                                            </s-popover>
+                                        </s-grid>
                                     </s-table-header>
-                                ))}
+                                    );
+                                })}
                                 <s-table-header>
-                                    Attachment
+                                    <s-grid gridTemplateColumns="1fr auto" alignItems="center">
+                                        Attachment
+                                        <s-button
+                                            variant="tertiary"
+                                            icon={hasAttachmentFilter ? "filter-active" : "filter"}
+                                            commandFor="filter_attachment"
+                                            command="--toggle"
+                                        />
+                                        <s-popover id="filter_attachment" inlineSize="220px">
+                                            <s-grid padding="base" gap="small" gridTemplateColumns="170px">
+                                                <s-choice-list
+                                                    label="Attachment type"
+                                                    name="attachment-filter"
+                                                    values={normalizedAttachmentFilter ? [normalizedAttachmentFilter] : []}
+                                                    onInput={(event) => handleAttachmentFilterChange(getChoiceListValue(event))}
+                                                    onChange={(event) => handleAttachmentFilterChange(getChoiceListValue(event))}
+                                                >
+                                                    <s-choice
+                                                        value="PRODUCT"
+                                                        selected={normalizedAttachmentFilter === "PRODUCT"}
+                                                        onClick={() => handleAttachmentFilterChange("PRODUCT")}
+                                                    >
+                                                        Products
+                                                    </s-choice>
+                                                    <s-choice
+                                                        value="COLLECTION"
+                                                        selected={normalizedAttachmentFilter === "COLLECTION"}
+                                                        onClick={() => handleAttachmentFilterChange("COLLECTION")}
+                                                    >
+                                                        Collections
+                                                    </s-choice>
+                                                </s-choice-list>
+                                                <s-button
+                                                    variant="secondary"
+                                                    disabled={!hasAttachmentFilter}
+                                                    onClick={clearAttachmentFilter}
+                                                >
+                                                    <div style={{width: "146px", textAlign: "center"}}>Clear filter</div>
+                                                </s-button>
+                                            </s-grid>
+                                        </s-popover>
+                                    </s-grid>
                                 </s-table-header>
                                 <s-table-header>
                                     <s-stack alignItems="end">
@@ -577,16 +842,16 @@ export default function Database() {
                             </s-table-header-row>
 
                             <s-table-body>
-                                {rows?.map((row, index) => (
-                                    <s-table-row key={index}>
+                                {paginatedRows.map((row, index) => (
+                                    <s-table-row key={row.id}>
                                         <s-table-cell>
                                             <s-grid gridTemplateColumns="30px 1fr">
-                                                <div style={{ padding: "0 5px" }}>{index+1}</div>
+                                                <div style={{ padding: "0 5px" }}>{pageStartIndex + index + 1}</div>
                                                 <s-checkbox value={row?.id} />
                                             </s-grid>
                                         </s-table-cell>
-                                        {fields.map((field, index) => (
-                                            <s-table-cell key={index}>
+                                        {fields.map((field) => (
+                                            <s-table-cell key={field.id}>
                                                 {row?.columns?.[field.id] || ""}
                                             </s-table-cell>
                                         ))}
@@ -616,10 +881,38 @@ export default function Database() {
                                 ))}
                             </s-table-body>
                         </s-table>
+                        <s-stack background="subdued" border="base" borderWidth="base none none none" direction="inline" justifyContent="center" alignItems="center" gap="small" padding="small">
+                            <s-button
+                                variant="secondary"
+                                icon="arrow-left"
+                                disabled={currentPage <= 1}
+                                onClick={handlePreviousPage}
+                            />
+                            <s-text>Page {currentPage} of {totalPages}</s-text> /
+                            <s-text>{visibleStart}-{visibleEnd} of {filteredRows.length}</s-text>
+                            {hasFilters && (
+                                <s-button variant="tertiary" onClick={clearAllTableFilters}>
+                                    Clear filters
+                                </s-button>
+                            )}
+                            <s-button
+                                variant="secondary"
+                                icon="arrow-right"
+                                disabled={currentPage >= totalPages || filteredRows.length === 0}
+                                onClick={handleNextPage}
+                            />
+                        </s-stack>
                         {rows?.length === 0 && (
                             <div style={{background: "#fff"}}>
                                 <s-stack padding="small" alignItems="center">
                                     No entries
+                                </s-stack>
+                            </div>
+                        )}
+                        {rows?.length > 0 && filteredRows.length === 0 && (
+                            <div style={{background: "#fff"}}>
+                                <s-stack padding="small" alignItems="center">
+                                    No matching entries
                                 </s-stack>
                             </div>
                         )}
