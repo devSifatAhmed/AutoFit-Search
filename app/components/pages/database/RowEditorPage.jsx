@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useFetcher, useNavigate } from "react-router";
 import Loader from "../../essentials/Loader";
 import Section from "../../essentials/Section";
@@ -21,6 +21,10 @@ function buildInitialFieldData(fields) {
             maxValue: "",
         };
     });
+}
+
+function normalizeSnapshot(value) {
+    return JSON.stringify(value || []);
 }
 
 export default function RowEditorPage({
@@ -45,6 +49,10 @@ export default function RowEditorPage({
     const [isDeleting, setIsDeleting] = useState(null);
     const [isCheckedAllProduct, setIsCheckedAllProduct] = useState(false);
     const [isCheckedAllCollection, setIsCheckedAllCollection] = useState(false);
+    const baselineFieldData = useMemo(
+        () => initialFieldData || buildInitialFieldData(fields),
+        [fields, initialFieldData],
+    );
 
     useEffect(() => {
         setFieldData(initialFieldData || buildInitialFieldData(fields));
@@ -54,13 +62,21 @@ export default function RowEditorPage({
     }, [fields, initialFieldData, initialAttachments, initialAttachmentMode]);
 
     useEffect(() => {
-        if (addingRole === "PRODUCT") {
-            setIsChanged(products.length > 0);
-            return;
-        }
+        const hasAttachmentSelection = addingRole === "PRODUCT"
+            ? products.length > 0
+            : collections.length > 0;
+        const attachmentSnapshot = addingRole === "PRODUCT" ? products : collections;
+        const initialAttachmentSnapshot = initialAttachmentMode === "PRODUCT"
+            ? (initialAttachments || [])
+            : (initialAttachments || []);
+        const fieldDataChanged = normalizeSnapshot(fieldData) !== normalizeSnapshot(baselineFieldData);
+        const attachmentChanged = normalizeSnapshot(attachmentSnapshot) !== normalizeSnapshot(initialAttachmentSnapshot);
+        const modeChanged = addingRole !== (initialAttachmentMode || "PRODUCT");
 
-        setIsChanged(collections.length > 0);
-    }, [addingRole, products, collections]);
+        setIsChanged(mode === "add"
+            ? hasAttachmentSelection
+            : fieldDataChanged || attachmentChanged || modeChanged);
+    }, [addingRole, products, collections, fieldData, baselineFieldData, initialAttachments, initialAttachmentMode, mode]);
 
     const handleAddingRole = (role) => {
         setAddingRole(role);
@@ -163,7 +179,7 @@ export default function RowEditorPage({
             }
 
             if ("minValue" in field && "maxValue" in field && Number(field.minValue) > Number(field.maxValue)) {
-                shopify.toast.show(`${fieldMeta?.label} start year cannot be greater than end year`, { isError: true });
+                shopify.toast.show(`${fieldMeta?.label} start value cannot be greater than end value`, { isError: true });
                 return false;
             }
         }
@@ -225,7 +241,7 @@ export default function RowEditorPage({
         }
 
         setIsSaving(null);
-    }, [fetcher.state, fetcher.data, isSaving, mode, fields]);
+    }, [fetcher.state, fetcher.data, isSaving, mode, fields, navigate]);
 
     if (isLoading) {
         return <Loader />;
@@ -312,7 +328,7 @@ export default function RowEditorPage({
                                                         label={`${field.label} From`}
                                                         placeholder={`Select ${field.label?.toLowerCase()} from`}
                                                         onChange={(e) => handleNumberFieldData({ id: field.id, minValue: parseInt(e.currentTarget.value, 10) })}
-                                                        value={fieldData.find((item) => item.fieldId === field.id)?.minValue || ""}
+                                                        value={fieldData.find((item) => item.fieldId === field.id)?.minValue ?? ""}
                                                     >
                                                         {Array.from({ length: (field.rangeEnd - field.rangeStart) + 1 }, (_, index) => field.rangeStart + index)
                                                             .filter((year) => {
@@ -329,7 +345,7 @@ export default function RowEditorPage({
                                                         label={`${field.label} To`}
                                                         placeholder={`Select ${field.label?.toLowerCase()} to`}
                                                         onChange={(e) => handleNumberFieldData({ id: field.id, maxValue: parseInt(e.currentTarget.value, 10) })}
-                                                        value={fieldData.find((item) => item.fieldId === field.id)?.maxValue || ""}
+                                                        value={fieldData.find((item) => item.fieldId === field.id)?.maxValue ?? ""}
                                                     >
                                                         {Array.from({ length: (field.rangeEnd - field.rangeStart) + 1 }, (_, index) => field.rangeStart + index)
                                                             .filter((year) => {

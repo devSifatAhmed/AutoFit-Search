@@ -1,6 +1,8 @@
 import prisma from "../db.server.js";
-import { rebuildRowFilterSignatures } from "./rows.server.js";
+import { rebuildProductTagsForShop, rebuildRowFilterSignatures } from "./rows.server.js";
 import { validateShop } from "./validate_shop.server.js";
+
+const DEFAULT_RANGE_FIELD_LIMIT = 1;
 
 function slugifyKey(value) {
     return String(value || "")
@@ -28,7 +30,20 @@ function normalizeField(field) {
     };
 }
 
-async function validateFieldInput({ shopId, field, existingFieldId = null }) {
+export function getRangeFieldLimit() {
+    const configuredLimit = Number(process.env.AUTO_FIT_RANGE_FIELD_LIMIT || DEFAULT_RANGE_FIELD_LIMIT);
+
+    return Number.isInteger(configuredLimit) && configuredLimit > 0
+        ? configuredLimit
+        : DEFAULT_RANGE_FIELD_LIMIT;
+}
+
+async function validateFieldInput({
+    shopId,
+    field,
+    existingFieldId = null,
+    rangeFieldLimit = getRangeFieldLimit(),
+}) {
     const normalizedField = normalizeField(field);
     const fieldKey = field?.key || slugifyKey(normalizedField.label);
 
@@ -60,19 +75,37 @@ async function validateFieldInput({ shopId, field, existingFieldId = null }) {
             throw new Error("Range start must be less than or equal to range end");
         }
 
-        const existingRangeField = await prisma.field.findFirst({
+        const currentRangeCount = await prisma.field.count({
             where: {
                 shopId,
                 type: "RANGE",
                 ...(existingFieldId ? { id: { not: existingFieldId } } : {}),
+            },
+        });
+
+        if (currentRangeCount >= rangeFieldLimit) {
+            throw new Error(rangeFieldLimit <= 1
+                ? "Range fields are available with a premium subscription"
+                : `Range field limit reached for this shop (${rangeFieldLimit})`);
+        }
+    }
+
+    if (existingFieldId && normalizedField.type === "RANGE") {
+        const outOfBoundsRangeValue = await prisma.rowRangeValue.findFirst({
+            where: {
+                fieldId: existingFieldId,
+                OR: [
+                    { minValue: { lt: normalizedField.rangeStart } },
+                    { maxValue: { gt: normalizedField.rangeEnd } },
+                ],
             },
             select: {
                 id: true,
             },
         });
 
-        if (existingRangeField) {
-            throw new Error("Only one range field is allowed per shop");
+        if (outOfBoundsRangeValue) {
+            throw new Error("Range bounds cannot exclude existing search entry values");
         }
     }
 
@@ -82,23 +115,22 @@ async function validateFieldInput({ shopId, field, existingFieldId = null }) {
     };
 }
 
-async function listFields({shopId, suggestions}) {
-
+async function listFields({ shopId, suggestions }) {
     return prisma.field.findMany({
         where: {
             shopId,
         },
         orderBy: [
-            { position: "asc" }
+            { position: "asc" },
         ],
         include: {
-            suggestions: suggestions ? true : false
-        }
+            suggestions: suggestions ? true : false,
+        },
     });
 }
 
 async function normalizeFieldPositions(shopId) {
-    const fields = await listFields({shopId});
+    const fields = await listFields({ shopId });
 
     await prisma.$transaction(async (tx) => {
         for (const [index, field] of fields.entries()) {
@@ -124,55 +156,150 @@ async function normalizeFieldPositions(shopId) {
         }
     });
 
-    return listFields({shopId});
+    return listFields({ shopId });
+}
+
+async function backfillRangeValuesForField({ field, client = prisma }) {
+    if (field.type !== "RANGE") {
+        return 0;
+    }
+
+    const rows = await client.searchRow.findMany({
+        where: {
+            shopId: field.shopId,
+        },
+        select: {
+            id: true,
+        },
+    });
+
+    if (rows.length === 0) {
+        return 0;
+    }
+
+    await client.rowRangeValue.createMany({
+        data: rows.map((row) => ({
+            rowId: row.id,
+            fieldId: field.id,
+            minValue: field.rangeStart,
+            maxValue: field.rangeEnd,
+        })),
+        skipDuplicates: true,
+    });
+
+    return rows.length;
+}
+
+async function assertFieldCanBeDeleted({ shopId, fieldId }) {
+    const field = await prisma.field.findFirst({
+        where: {
+            id: fieldId,
+            shopId,
+        },
+        select: {
+            id: true,
+            type: true,
+            label: true,
+        },
+    });
+
+    if (!field) {
+        throw new Error("Field not found");
+    }
+
+    const usageCount = field.type === "RANGE"
+        ? await prisma.rowRangeValue.count({
+            where: {
+                fieldId,
+            },
+        })
+        : await prisma.rowValue.count({
+            where: {
+                fieldId,
+            },
+        });
+
+    if (usageCount > 0) {
+        throw new Error(`${field.label} cannot be deleted while search entries use it`);
+    }
 }
 
 export async function getFields({ admin, shopId, suggestions }) {
-    let fields = await listFields({shopId, suggestions});
+    let fields = await listFields({ shopId, suggestions });
 
     if (fields.length === 0 && admin) {
         await validateShop(admin);
-        fields = await listFields({shopId, suggestions});
+        fields = await listFields({ shopId, suggestions });
     }
     return fields;
 }
 
-export async function createField({ admin, shopId, field }) {
+export async function createField({
+    admin,
+    shopId,
+    field,
+    rangeFieldLimit = getRangeFieldLimit(),
+}) {
     if (admin) {
         await validateShop(admin);
     }
 
-    const normalizedField = await validateFieldInput({ shopId, field });
+    const normalizedField = await validateFieldInput({ shopId, field, rangeFieldLimit });
     const fields = await normalizeFieldPositions(shopId);
 
-    await prisma.field.create({
-        data: {
-            ...normalizedField,
-            shopId,
-            position: fields.length,
-        },
+    const createdField = await prisma.$transaction(async (tx) => {
+        const nextField = await tx.field.create({
+            data: {
+                ...normalizedField,
+                shopId,
+                position: fields.length,
+            },
+        });
+
+        await backfillRangeValuesForField({ field: nextField, client: tx });
+
+        return nextField;
     });
 
-    return listFields({shopId});
+    if (createdField.type === "RANGE") {
+        await rebuildProductTagsForShop({ admin, shopId });
+    }
+
+    return listFields({ shopId });
 }
 
-export async function editField({ shopId, field }) {
+export async function editField({
+    shopId,
+    field,
+    rangeFieldLimit = getRangeFieldLimit(),
+}) {
     const existingField = await prisma.field.findUnique({
         where: {
             id: field.id,
         },
         select: {
             key: true,
+            type: true,
         },
     });
+
+    if (!existingField) {
+        throw new Error("Field not found");
+    }
+
+    if (field.type && field.type !== existingField.type) {
+        throw new Error("Field type cannot be changed");
+    }
 
     const normalizedField = await validateFieldInput({
         shopId,
         field: {
             ...field,
-            key: existingField?.key,
+            key: existingField.key,
+            type: existingField.type,
         },
         existingFieldId: field.id,
+        rangeFieldLimit,
     });
 
     await prisma.field.update({
@@ -182,10 +309,12 @@ export async function editField({ shopId, field }) {
         data: normalizedField,
     });
 
-    return listFields({shopId});
+    return listFields({ shopId });
 }
 
 export async function deleteField({ shopId, field }) {
+    await assertFieldCanBeDeleted({ shopId, fieldId: field });
+
     await prisma.field.delete({
         where: {
             id: field,
@@ -197,10 +326,10 @@ export async function deleteField({ shopId, field }) {
 
 export async function reorderFields({ shopId, fieldIds }) {
     if (!Array.isArray(fieldIds) || fieldIds.length === 0) {
-        return listFields({shopId});
+        return listFields({ shopId });
     }
 
-    const fields = await listFields({shopId});
+    const fields = await listFields({ shopId });
     const existingFieldIds = fields.map((field) => field.id);
     const hasSameFields = existingFieldIds.length === fieldIds.length
         && existingFieldIds.every((fieldId) => fieldIds.includes(fieldId));
@@ -235,5 +364,5 @@ export async function reorderFields({ shopId, fieldIds }) {
         await rebuildRowFilterSignatures(shopId, tx);
     });
 
-    return listFields({shopId});
+    return listFields({ shopId });
 }

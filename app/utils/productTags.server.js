@@ -1,3 +1,5 @@
+export const MAX_PRODUCT_TAG_RANGE_VALUES = 500;
+
 function slugify(value) {
     return String(value || "")
         .trim()
@@ -7,16 +9,55 @@ function slugify(value) {
         .replace(/_+/g, "_");
 }
 
+function getRangeValueMap(row) {
+    return new Map((row.rangeValues || []).map((rangeValue) => [
+        rangeValue.fieldId,
+        {
+            minValue: Number(rangeValue.minValue),
+            maxValue: Number(rangeValue.maxValue),
+        },
+    ]));
+}
+
+function getLegacyRangeValue(row) {
+    if (row.startYear === null || row.startYear === undefined || row.endYear === null || row.endYear === undefined) {
+        return null;
+    }
+
+    return {
+        minValue: Number(row.startYear),
+        maxValue: Number(row.endYear),
+    };
+}
+
+function assertRangeSpanIsTaggable(field, rangeValue) {
+    const span = rangeValue.maxValue - rangeValue.minValue + 1;
+
+    if (span > MAX_PRODUCT_TAG_RANGE_VALUES) {
+        throw new Error(`${field.label} range is too large for product tag search. Keep product range spans at ${MAX_PRODUCT_TAG_RANGE_VALUES} values or less.`);
+    }
+}
+
 export function buildProductTags({ fields, row }) {
     const tags = [];
-    const valueMap = new Map(row.values.map((value) => [value.fieldId, value.value]));
+    const valueMap = new Map((row.values || []).map((value) => [value.fieldId, value.value]));
+    const rangeValueMap = getRangeValueMap(row);
+    const legacyRangeValue = rangeValueMap.size === 0 ? getLegacyRangeValue(row) : null;
 
     for (const field of fields) {
         const fieldKey = field.key || slugify(field.label) || field.id;
 
         if (field.type === "RANGE") {
-            for (let year = row.startYear; year <= row.endYear; year += 1) {
-                tags.push(`autofit_${fieldKey}_${year}`);
+            const rangeValue = rangeValueMap.get(field.id) || legacyRangeValue;
+
+            if (!rangeValue) {
+                continue;
+            }
+
+            assertRangeSpanIsTaggable(field, rangeValue);
+
+            for (let value = rangeValue.minValue; value <= rangeValue.maxValue; value += 1) {
+                tags.push(`autofit_${fieldKey}_${value}`);
             }
             continue;
         }

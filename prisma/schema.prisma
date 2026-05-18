@@ -56,6 +56,7 @@ model Field {
   rangeEnd      Int?
 
   values        RowValue[]
+  rangeValues   RowRangeValue[]
   suggestions   FilterSuggestion[]
 
   position      Int       @default(0)
@@ -91,14 +92,15 @@ model SearchRow {
   shopId        String
   shop          Shop      @relation(fields: [shopId], references:[shopifyGid], onDelete: Cascade)
 
-  startYear     Int
-  endYear       Int
+  startYear     Int?
+  endYear       Int?
   attachmentMode AttachmentMode
   filterSignature String?
   tag           String?
   productTags   String[]   @default([])
 
   values        RowValue[]
+  rangeValues   RowRangeValue[]
   attachments   RowAttachment[]
 
   createdAt     DateTime  @default(now())
@@ -123,6 +125,23 @@ model RowValue {
   @@unique([rowId, fieldId])
   @@index([fieldId, value])
   @@index([rowId, fieldId])
+}
+
+model RowRangeValue {
+  id            String    @id @default(uuid())
+
+  rowId         String
+  row           SearchRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+
+  fieldId       String
+  field         Field     @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  minValue      Int
+  maxValue      Int
+
+  @@unique([rowId, fieldId])
+  @@index([rowId, fieldId])
+  @@index([fieldId, minValue, maxValue])
 }
 
 model RowAttachment {

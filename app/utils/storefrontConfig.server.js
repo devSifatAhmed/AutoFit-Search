@@ -30,18 +30,48 @@ function mapField(field) {
     };
 }
 
-function mapRow(row) {
+function getRangeValues(row, fields) {
+    if (row.rangeValues?.length > 0) {
+        return row.rangeValues.map((rangeValue) => ({
+            fieldId: rangeValue.fieldId,
+            key: resolveFieldKey(rangeValue.field),
+            minValue: rangeValue.minValue,
+            maxValue: rangeValue.maxValue,
+        }));
+    }
+
+    const legacyRangeField = fields.find((field) => field.type === "RANGE");
+
+    if (!legacyRangeField || row.startYear === null || row.startYear === undefined || row.endYear === null || row.endYear === undefined) {
+        return [];
+    }
+
+    return [
+        {
+            fieldId: legacyRangeField.id,
+            key: resolveFieldKey(legacyRangeField),
+            minValue: row.startYear,
+            maxValue: row.endYear,
+        },
+    ];
+}
+
+function mapRow(row, fields) {
+    const rangeValues = getRangeValues(row, fields);
+    const firstRangeValue = rangeValues[0] || null;
+
     return {
         id: row.id,
         attachmentMode: row.attachmentMode,
-        startYear: row.startYear,
-        endYear: row.endYear,
+        startYear: firstRangeValue?.minValue ?? row.startYear,
+        endYear: firstRangeValue?.maxValue ?? row.endYear,
         filterSignature: row.filterSignature,
         values: row.values.map((value) => ({
             fieldId: value.fieldId,
             key: resolveFieldKey(value.field),
             value: value.value,
         })),
+        rangeValues,
         attachments: row.attachments.map((attachment) => ({
             id: attachment.shopifyGid,
         })),
@@ -160,6 +190,11 @@ export async function buildStorefrontConfig(shopId) {
                         field: true,
                     },
                 },
+                rangeValues: {
+                    include: {
+                        field: true,
+                    },
+                },
                 attachments: true,
             },
         }),
@@ -174,7 +209,7 @@ export async function buildStorefrontConfig(shopId) {
 
     return {
         fields: fields.map(mapField),
-        rows: rows.map(mapRow),
+        rows: rows.map((row) => mapRow(row, fields)),
         suggestions: suggestions.map(mapSuggestion),
         updatedAt: new Date().toISOString(),
     };

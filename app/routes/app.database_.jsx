@@ -40,7 +40,7 @@ const restrictToVerticalAxis = ({ transform }) => ({
 export async function action({request}) {
     const { admin } = await authenticate.admin(request);
     const { createField, editField, deleteField, reorderFields} = await import("../utils/fields.server");
-    const { deleteRow } = await import("../utils/rows.server");
+    const { deleteRow, getRows } = await import("../utils/rows.server");
     const { syncStorefrontConfig } = await import("../utils/storefrontConfig.server");
     const prisma = (await import("../db.server.js")).default;
     const formData = await request.formData();
@@ -69,7 +69,8 @@ export async function action({request}) {
             }
 
             await syncStorefrontConfig(admin, shopId);
-            return { success: true, fields };
+            const rows = await getRows({ shopId });
+            return { success: true, fields, rows };
         }
 
         if (target === "row") {
@@ -223,14 +224,22 @@ function FieldDragPreview({ field }) {
 
 export async function loader({request}) {
     const { admin } = await authenticate.admin(request);
-    const { getFields } = await import("../utils/fields.server");
+    const { getFields, getRangeFieldLimit } = await import("../utils/fields.server");
 
     const shopData = await getShopData(admin);
 
     const fields = await getFields({admin, shopId: shopData.id});
     const rows = await getRows({admin, shopId: shopData.id});
+    const rangeFieldLimit = getRangeFieldLimit();
+    const currentRangeFieldCount = fields.filter((field) => field.type === "RANGE").length;
 
-    return { fields, rows, shopData };
+    return {
+        fields,
+        rows,
+        shopData,
+        rangeFieldLimit,
+        currentRangeFieldCount,
+    };
 }
 
 export default function Database() {
@@ -240,7 +249,13 @@ export default function Database() {
     // default page loading spinner end
 
     // managing data from loader start 
-    const { fields: loadedFields, rows: loadedRows, shopData } = useLoaderData();
+    const {
+        fields: loadedFields,
+        rows: loadedRows,
+        shopData,
+        rangeFieldLimit,
+        currentRangeFieldCount,
+    } = useLoaderData();
     const [fields, setFields] = useState(loadedFields);
     const [rows, setRows] = useState(loadedRows);
     // managing data from loader end
@@ -388,6 +403,9 @@ export default function Database() {
             if (fetcher.data.fields) {
                 setFields(fetcher.data.fields);
             }
+            if (fetcher.data.rows) {
+                setRows(fetcher.data.rows);
+            }
             if (fetcher.data.deletedRowId) {
                 setRows((currentRows) => currentRows.filter((row) => row.id !== fetcher.data.deletedRowId));
             }
@@ -431,6 +449,8 @@ export default function Database() {
                 saveProgress={saveProgress} 
                 handleUpdate={handleUpdate}
                 loadingProgress={loadingProgress}
+                rangeFieldLimit={rangeFieldLimit}
+                currentRangeFieldCount={fields.filter((field) => field.type === "RANGE").length || currentRangeFieldCount}
             />
             <s-stack paddingBlock='small large'>
                 <s-grid gridTemplateColumns="1fr 2fr" gap="base large">

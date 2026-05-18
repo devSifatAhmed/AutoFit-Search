@@ -1,5 +1,7 @@
 # AutoFit Search Master Implementation Plan
 
+> Update: the original product direction in this file was the single `Year` range architecture. The active implementation direction now supports multiple `RANGE` fields through `RowRangeValue`; see `MULTIPLE_RANGE_FIELDS_PLAN.md` for the completed multi-range rollout details. Historical sections below are retained for context.
+
 This document is the source of truth for turning AutoFit Search into a production-ready Shopify-style dynamic filter engine with Year-Make-Model support.
 
 It is written to match the current codebase as it exists today, not an earlier intended state. The goal is to make future work predictable: we should be able to follow this file task by task until the project is complete.

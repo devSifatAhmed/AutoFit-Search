@@ -27,9 +27,81 @@ function resolveFieldKey(field) {
     return field?.key || field?.label?.trim()?.toLowerCase()?.replace(/[^a-z0-9]+/g, "_")?.replace(/^_+|_+$/g, "") || field?.id;
 }
 
+function getSelectFields(fieldDefinitions) {
+    return fieldDefinitions.filter((field) => field.type === "SELECT");
+}
+
+function getRangeFields(fieldDefinitions) {
+    return fieldDefinitions.filter((field) => field.type === "RANGE");
+}
+
+function rangeValueFromRowValue(rowRangeValue) {
+    return {
+        fieldId: rowRangeValue.fieldId,
+        minValue: Number(rowRangeValue.minValue),
+        maxValue: Number(rowRangeValue.maxValue),
+    };
+}
+
+function getRangeValueMap(row, rangeFields = []) {
+    const rangeValueMap = new Map(
+        (row.rangeValues || []).map((rangeValue) => [
+            rangeValue.fieldId,
+            rangeValueFromRowValue(rangeValue),
+        ]),
+    );
+
+    if (rangeValueMap.size === 0 && row.startYear !== null && row.startYear !== undefined && row.endYear !== null && row.endYear !== undefined && rangeFields.length > 0) {
+        rangeValueMap.set(rangeFields[0].id, {
+            fieldId: rangeFields[0].id,
+            minValue: Number(row.startYear),
+            maxValue: Number(row.endYear),
+        });
+    }
+
+    return rangeValueMap;
+}
+
+function getOrderedRangeValues(row, rangeFields = []) {
+    const rangeValueMap = getRangeValueMap(row, rangeFields);
+
+    return rangeFields
+        .map((field) => rangeValueMap.get(field.id))
+        .filter(Boolean);
+}
+
+export function rangesOverlap(existingRange, nextRange) {
+    return Number(existingRange.minValue) <= Number(nextRange.maxValue)
+        && Number(existingRange.maxValue) >= Number(nextRange.minValue);
+}
+
 export function hasYearRangeOverlap(existingRange, nextRange) {
-    return existingRange.startYear <= nextRange.endYear
-        && existingRange.endYear >= nextRange.startYear;
+    return rangesOverlap(
+        {
+            minValue: existingRange.startYear,
+            maxValue: existingRange.endYear,
+        },
+        {
+            minValue: nextRange.startYear,
+            maxValue: nextRange.endYear,
+        },
+    );
+}
+
+export function rangeSetsOverlap(existingRangeValues, nextRangeValues, rangeFields) {
+    const existingRangeMap = new Map(existingRangeValues.map((rangeValue) => [rangeValue.fieldId, rangeValue]));
+    const nextRangeMap = new Map(nextRangeValues.map((rangeValue) => [rangeValue.fieldId, rangeValue]));
+
+    return rangeFields.every((field) => {
+        const existingRange = existingRangeMap.get(field.id);
+        const nextRange = nextRangeMap.get(field.id);
+
+        if (!existingRange || !nextRange) {
+            return false;
+        }
+
+        return rangesOverlap(existingRange, nextRange);
+    });
 }
 
 export function buildFilterSignature(selectValues, fieldMap) {
@@ -110,28 +182,40 @@ async function listRows(shopId) {
                     field: true,
                 },
             },
+            rangeValues: {
+                include: {
+                    field: true,
+                },
+            },
             attachments: true,
         },
     });
 }
 
-function formatRangeLabel(startYear, endYear) {
-    return startYear === endYear
-        ? String(startYear)
-        : `${startYear}-${endYear}`;
+function formatRangeLabel(minValue, maxValue) {
+    return Number(minValue) === Number(maxValue)
+        ? String(minValue)
+        : `${minValue}-${maxValue}`;
 }
 
 function mapRowToAdminShape(row, fieldDefinitions) {
     const columns = {};
-    const rangeField = fieldDefinitions.find((field) => field.type === "RANGE");
+    const rangeFields = getRangeFields(fieldDefinitions);
+    const rangeValueMap = getRangeValueMap(row, rangeFields);
 
-    if (rangeField) {
-        columns[rangeField.id] = formatRangeLabel(row.startYear, row.endYear);
+    for (const field of rangeFields) {
+        const rangeValue = rangeValueMap.get(field.id);
+
+        if (rangeValue) {
+            columns[field.id] = formatRangeLabel(rangeValue.minValue, rangeValue.maxValue);
+        }
     }
 
     for (const value of row.values) {
         columns[value.fieldId] = value.value;
     }
+
+    const firstRangeValue = getOrderedRangeValues(row, rangeFields)[0] || null;
 
     return {
         id: row.id,
@@ -139,8 +223,9 @@ function mapRowToAdminShape(row, fieldDefinitions) {
         role: row.attachmentMode.toLowerCase(),
         attachmentMode: row.attachmentMode,
         attachments: row.attachments,
-        startYear: row.startYear,
-        endYear: row.endYear,
+        startYear: firstRangeValue?.minValue ?? row.startYear,
+        endYear: firstRangeValue?.maxValue ?? row.endYear,
+        rangeValues: getOrderedRangeValues(row, rangeFields),
         filterSignature: row.filterSignature,
         tag: row.tag,
         productTags: row.productTags,
@@ -173,6 +258,7 @@ export async function getRowById({ shopId, rowId }) {
         },
         include: {
             values: true,
+            rangeValues: true,
             attachments: true,
         },
     });
@@ -184,33 +270,30 @@ export async function getRowById({ shopId, rowId }) {
     return row;
 }
 
-function extractRangeValue(fieldEntry, rangeFieldId) {
-    if (fieldEntry.fieldId !== rangeFieldId) {
-        return null;
+function extractRangeValue(fieldEntry, fieldMeta) {
+    const minValue = Number(fieldEntry.minValue);
+    const maxValue = Number(fieldEntry.maxValue);
+
+    if (!Number.isInteger(minValue) || !Number.isInteger(maxValue)) {
+        throw new Error(`${fieldMeta.label} range must use valid integer values`);
     }
 
-    const startYear = Number(fieldEntry.minValue);
-    const endYear = Number(fieldEntry.maxValue);
-
-    if (!Number.isInteger(startYear) || !Number.isInteger(endYear)) {
-        throw new Error("Year range must use valid integer values");
+    if (minValue > maxValue) {
+        throw new Error(`${fieldMeta.label} range start must be less than or equal to end`);
     }
 
-    if (startYear > endYear) {
-        throw new Error("Year range start must be less than or equal to end");
+    if (minValue < fieldMeta.rangeStart || maxValue > fieldMeta.rangeEnd) {
+        throw new Error(`${fieldMeta.label} range must stay within ${fieldMeta.rangeStart}-${fieldMeta.rangeEnd}`);
     }
 
     return {
-        startYear,
-        endYear,
+        fieldId: fieldMeta.id,
+        minValue,
+        maxValue,
     };
 }
 
 function extractSelectValue(fieldEntry, fieldMeta) {
-    if (fieldMeta.type !== "SELECT") {
-        return null;
-    }
-
     const value = normalizeTextValue(fieldEntry.value);
 
     if (!value) {
@@ -271,15 +354,16 @@ async function getFieldContext(shopId) {
         throw new Error("Create fields before adding search entries");
     }
 
-    const rangeFields = fieldDefinitions.filter((field) => field.type === "RANGE");
+    const rangeFields = getRangeFields(fieldDefinitions);
 
-    if (rangeFields.length !== 1) {
-        throw new Error("Exactly one range field must exist before creating a row");
+    if (rangeFields.length === 0) {
+        throw new Error("At least one range field must exist before creating a row");
     }
 
     return {
         fieldDefinitions,
-        rangeField: rangeFields[0],
+        selectFields: getSelectFields(fieldDefinitions),
+        rangeFields,
         fieldMap: new Map(fieldDefinitions.map((field) => [field.id, field])),
     };
 }
@@ -322,15 +406,19 @@ async function rebuildFilterSuggestions(shopId) {
     });
 }
 
-function buildEditorPayload(parsedFields, fieldDefinitions, rangeField, fieldMap) {
+function buildEditorPayload(parsedFields, fieldDefinitions, selectFields, rangeFields, fieldMap) {
     const submittedFieldIds = new Set(parsedFields.map((field) => field.fieldId));
 
-    if (submittedFieldIds.size !== fieldDefinitions.length || fieldDefinitions.some((field) => !submittedFieldIds.has(field.id))) {
+    if (
+        parsedFields.length !== fieldDefinitions.length
+        || submittedFieldIds.size !== fieldDefinitions.length
+        || fieldDefinitions.some((field) => !submittedFieldIds.has(field.id))
+    ) {
         throw new Error("Submitted fields do not match the current field configuration");
     }
 
-    let rangeValue = null;
     const selectValues = [];
+    const rangeValues = [];
 
     for (const fieldEntry of parsedFields) {
         const fieldMeta = fieldMap.get(fieldEntry.fieldId);
@@ -340,58 +428,52 @@ function buildEditorPayload(parsedFields, fieldDefinitions, rangeField, fieldMap
         }
 
         if (fieldMeta.type === "RANGE") {
-            const extractedRange = extractRangeValue(fieldEntry, rangeField.id);
-
-            if (!extractedRange) {
-                throw new Error("A valid year range is required");
-            }
-
-            rangeValue = extractedRange;
+            rangeValues.push(extractRangeValue(fieldEntry, fieldMeta));
             continue;
         }
 
-        const selectValue = extractSelectValue(fieldEntry, fieldMeta);
+        selectValues.push(extractSelectValue(fieldEntry, fieldMeta));
+    }
 
-        if (selectValue) {
-            selectValues.push(selectValue);
+    const normalizedSelectValues = selectFields.map((field) => {
+        const selectValue = selectValues.find((item) => item.fieldId === field.id);
+
+        if (!selectValue) {
+            throw new Error(`${field.label} is required`);
         }
-    }
 
-    if (!rangeValue) {
-        throw new Error("A valid year range is required");
-    }
+        return selectValue;
+    });
 
-    if (rangeValue.startYear < rangeField.rangeStart || rangeValue.endYear > rangeField.rangeEnd) {
-        throw new Error(`Year range must stay within ${rangeField.rangeStart}-${rangeField.rangeEnd}`);
-    }
+    const normalizedRangeValues = rangeFields.map((field) => {
+        const rangeValue = rangeValues.find((item) => item.fieldId === field.id);
 
-    const normalizedSelectValues = fieldDefinitions
-        .filter((field) => field.type === "SELECT")
-        .map((field) => {
-            const selectValue = selectValues.find((item) => item.fieldId === field.id);
+        if (!rangeValue) {
+            throw new Error(`${field.label} range is required`);
+        }
 
-            if (!selectValue) {
-                throw new Error(`${field.label} is required`);
-            }
-
-            return selectValue;
-        });
+        return rangeValue;
+    });
 
     return {
-        rangeValue,
+        normalizedRangeValues,
         normalizedSelectValues,
     };
 }
 
 function buildEditFieldData(fieldDefinitions, row) {
     const rowValueMap = new Map(row.values.map((value) => [value.fieldId, value.value]));
+    const rangeFields = getRangeFields(fieldDefinitions);
+    const rowRangeValueMap = getRangeValueMap(row, rangeFields);
 
     return fieldDefinitions.map((field) => {
         if (field.type === "RANGE") {
+            const rangeValue = rowRangeValueMap.get(field.id);
+
             return {
                 fieldId: field.id,
-                minValue: row.startYear,
-                maxValue: row.endYear,
+                minValue: rangeValue?.minValue ?? "",
+                maxValue: rangeValue?.maxValue ?? "",
             };
         }
 
@@ -400,6 +482,31 @@ function buildEditFieldData(fieldDefinitions, row) {
             value: rowValueMap.get(field.id) || "",
         };
     });
+}
+
+async function findOverlappingRow({
+    shopId,
+    filterSignature,
+    rangeFields,
+    rangeValues,
+    excludeRowId = null,
+}) {
+    const candidateRows = await prisma.searchRow.findMany({
+        where: {
+            shopId,
+            filterSignature,
+            ...(excludeRowId ? { id: { not: excludeRowId } } : {}),
+        },
+        include: {
+            rangeValues: true,
+        },
+    });
+
+    return candidateRows.find((row) => rangeSetsOverlap(
+        getOrderedRangeValues(row, rangeFields),
+        rangeValues,
+        rangeFields,
+    ));
 }
 
 async function syncProductTagsForCreateOrUpdate({
@@ -438,6 +545,62 @@ async function syncProductTagsForCreateOrUpdate({
     }
 }
 
+export async function rebuildProductTagsForShop({ admin = null, shopId }) {
+    const fields = await prisma.field.findMany({
+        where: {
+            shopId,
+        },
+        orderBy: [
+            { position: "asc" },
+        ],
+    });
+    const rows = await prisma.searchRow.findMany({
+        where: {
+            shopId,
+            attachmentMode: "PRODUCT",
+        },
+        include: {
+            values: true,
+            rangeValues: true,
+            attachments: true,
+        },
+    });
+
+    let updatedCount = 0;
+
+    for (const row of rows) {
+        const nextTags = buildProductTags({ fields, row });
+
+        if (admin && row.attachments.length > 0 && row.productTags.length > 0) {
+            await removeTagsFromProducts(
+                admin,
+                row.attachments.map((attachment) => attachment.shopifyGid),
+                row.productTags,
+            );
+        }
+
+        if (admin && row.attachments.length > 0 && nextTags.length > 0) {
+            await addTagsToProducts(
+                admin,
+                row.attachments.map((attachment) => attachment.shopifyGid),
+                nextTags,
+            );
+        }
+
+        await prisma.searchRow.update({
+            where: {
+                id: row.id,
+            },
+            data: {
+                productTags: nextTags,
+            },
+        });
+        updatedCount += 1;
+    }
+
+    return updatedCount;
+}
+
 export async function createRow({ admin, data }) {
     const { fields, attachments, type, shopId } = data;
     const parsedFields = parseJsonArray(fields, "fields");
@@ -447,62 +610,63 @@ export async function createRow({ admin, data }) {
         throw new Error("Shop id is required");
     }
 
-    const { fieldDefinitions, fieldMap, rangeField } = await getFieldContext(shopId);
-    const { rangeValue, normalizedSelectValues } = buildEditorPayload(parsedFields, fieldDefinitions, rangeField, fieldMap);
+    const { fieldDefinitions, selectFields, rangeFields, fieldMap } = await getFieldContext(shopId);
+    const { normalizedRangeValues, normalizedSelectValues } = buildEditorPayload(
+        parsedFields,
+        fieldDefinitions,
+        selectFields,
+        rangeFields,
+        fieldMap,
+    );
     const validatedAttachments = validateAttachments(type, parsedAttachments);
     const filterSignature = buildFilterSignature(normalizedSelectValues, fieldMap);
 
-    const overlappingRow = await prisma.searchRow.findFirst({
-        where: {
-            shopId,
-            filterSignature,
-            startYear: { lte: rangeValue.endYear },
-            endYear: { gte: rangeValue.startYear },
-        },
-        select: {
-            id: true,
-        },
+    const overlappingRow = await findOverlappingRow({
+        shopId,
+        filterSignature,
+        rangeFields,
+        rangeValues: normalizedRangeValues,
     });
 
     if (overlappingRow) {
-        throw new Error("An overlapping year range already exists for this filter combination");
+        throw new Error("An overlapping range already exists for this filter combination");
     }
 
+    const legacyRangeMirror = normalizedRangeValues[0];
     const productTags = type === "PRODUCT"
         ? buildProductTags({
             fields: fieldDefinitions,
             row: {
-                startYear: rangeValue.startYear,
-                endYear: rangeValue.endYear,
+                rangeValues: normalizedRangeValues,
                 values: normalizedSelectValues,
             },
         })
         : [];
 
-    const createdRow = await prisma.$transaction(async (tx) => {
-        const row = await tx.searchRow.create({
-            data: {
-                shopId,
-                startYear: rangeValue.startYear,
-                endYear: rangeValue.endYear,
-                attachmentMode: type,
-                filterSignature,
-                productTags,
-                values: {
-                    create: normalizedSelectValues,
-                },
-                attachments: {
-                    create: validatedAttachments,
-                },
+    const createdRow = await prisma.$transaction(async (tx) => tx.searchRow.create({
+        data: {
+            shopId,
+            startYear: legacyRangeMirror?.minValue ?? null,
+            endYear: legacyRangeMirror?.maxValue ?? null,
+            attachmentMode: type,
+            filterSignature,
+            productTags,
+            values: {
+                create: normalizedSelectValues,
             },
-            include: {
-                values: true,
-                attachments: true,
+            rangeValues: {
+                create: normalizedRangeValues,
             },
-        });
-
-        return row;
-    });
+            attachments: {
+                create: validatedAttachments,
+            },
+        },
+        include: {
+            values: true,
+            rangeValues: true,
+            attachments: true,
+        },
+    }));
 
     await rebuildFilterSuggestions(shopId);
 
@@ -534,6 +698,7 @@ export async function updateRow({ admin, data }) {
         },
         include: {
             values: true,
+            rangeValues: true,
             attachments: true,
         },
     });
@@ -542,36 +707,35 @@ export async function updateRow({ admin, data }) {
         throw new Error("Row not found");
     }
 
-    const { fieldDefinitions, fieldMap, rangeField } = await getFieldContext(shopId);
-    const { rangeValue, normalizedSelectValues } = buildEditorPayload(parsedFields, fieldDefinitions, rangeField, fieldMap);
+    const { fieldDefinitions, selectFields, rangeFields, fieldMap } = await getFieldContext(shopId);
+    const { normalizedRangeValues, normalizedSelectValues } = buildEditorPayload(
+        parsedFields,
+        fieldDefinitions,
+        selectFields,
+        rangeFields,
+        fieldMap,
+    );
     const validatedAttachments = validateAttachments(type, parsedAttachments);
     const filterSignature = buildFilterSignature(normalizedSelectValues, fieldMap);
 
-    const overlappingRow = await prisma.searchRow.findFirst({
-        where: {
-            shopId,
-            id: {
-                not: rowId,
-            },
-            filterSignature,
-            startYear: { lte: rangeValue.endYear },
-            endYear: { gte: rangeValue.startYear },
-        },
-        select: {
-            id: true,
-        },
+    const overlappingRow = await findOverlappingRow({
+        shopId,
+        filterSignature,
+        rangeFields,
+        rangeValues: normalizedRangeValues,
+        excludeRowId: rowId,
     });
 
     if (overlappingRow) {
-        throw new Error("An overlapping year range already exists for this filter combination");
+        throw new Error("An overlapping range already exists for this filter combination");
     }
 
+    const legacyRangeMirror = normalizedRangeValues[0];
     const productTags = type === "PRODUCT"
         ? buildProductTags({
             fields: fieldDefinitions,
             row: {
-                startYear: rangeValue.startYear,
-                endYear: rangeValue.endYear,
+                rangeValues: normalizedRangeValues,
                 values: normalizedSelectValues,
             },
         })
@@ -584,24 +748,33 @@ export async function updateRow({ admin, data }) {
             },
         });
 
+        await tx.rowRangeValue.deleteMany({
+            where: {
+                rowId,
+            },
+        });
+
         await tx.rowAttachment.deleteMany({
             where: {
                 rowId,
             },
         });
 
-        const row = await tx.searchRow.update({
+        return tx.searchRow.update({
             where: {
                 id: rowId,
             },
             data: {
-                startYear: rangeValue.startYear,
-                endYear: rangeValue.endYear,
+                startYear: legacyRangeMirror?.minValue ?? null,
+                endYear: legacyRangeMirror?.maxValue ?? null,
                 attachmentMode: type,
                 filterSignature,
                 productTags,
                 values: {
                     create: normalizedSelectValues,
+                },
+                rangeValues: {
+                    create: normalizedRangeValues,
                 },
                 attachments: {
                     create: validatedAttachments,
@@ -609,11 +782,10 @@ export async function updateRow({ admin, data }) {
             },
             include: {
                 values: true,
+                rangeValues: true,
                 attachments: true,
             },
         });
-
-        return row;
     });
 
     await rebuildFilterSuggestions(shopId);

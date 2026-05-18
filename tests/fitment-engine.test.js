@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import prisma from "../app/db.server.js";
-import { buildProductTags } from "../app/utils/productTags.server.js";
-import { hasYearRangeOverlap } from "../app/utils/rows.server.js";
+import { buildProductTags, MAX_PRODUCT_TAG_RANGE_VALUES } from "../app/utils/productTags.server.js";
+import { hasYearRangeOverlap, rangesOverlap, rangeSetsOverlap } from "../app/utils/rows.server.js";
 import { buildStorefrontMetafields, hydrateCollectionAttachmentHandles } from "../app/utils/storefrontConfig.server.js";
 import { getAvailableOptions, getMatchingRows, getSearchResults } from "../app/utils/storefrontSearch.server.js";
 
@@ -14,11 +14,12 @@ test("buildProductTags creates one tag per field value and one tag per year", ()
             { id: "f3", key: "year", label: "Year", type: "RANGE" },
         ],
         row: {
-            startYear: 2020,
-            endYear: 2022,
             values: [
                 { fieldId: "f1", value: "Toyota" },
                 { fieldId: "f2", value: "Corolla Cross" },
+            ],
+            rangeValues: [
+                { fieldId: "f3", minValue: 2020, maxValue: 2022 },
             ],
         },
     });
@@ -32,9 +33,57 @@ test("buildProductTags creates one tag per field value and one tag per year", ()
     ]);
 });
 
+test("buildProductTags rejects range spans that are too large for product tags", () => {
+    assert.throws(
+        () => buildProductTags({
+            fields: [
+                { id: "f1", key: "mileage", label: "Mileage", type: "RANGE" },
+            ],
+            row: {
+                values: [],
+                rangeValues: [
+                    { fieldId: "f1", minValue: 0, maxValue: MAX_PRODUCT_TAG_RANGE_VALUES },
+                ],
+            },
+        }),
+        /too large for product tag search/,
+    );
+});
+
 test("hasYearRangeOverlap detects intersecting ranges", () => {
     assert.equal(hasYearRangeOverlap({ startYear: 2018, endYear: 2020 }, { startYear: 2020, endYear: 2022 }), true);
     assert.equal(hasYearRangeOverlap({ startYear: 2018, endYear: 2020 }, { startYear: 2021, endYear: 2022 }), false);
+});
+
+test("rangeSetsOverlap requires every range dimension to overlap", () => {
+    const rangeFields = [
+        { id: "year" },
+        { id: "mileage" },
+    ];
+
+    assert.equal(rangesOverlap({ minValue: 2018, maxValue: 2020 }, { minValue: 2020, maxValue: 2022 }), true);
+    assert.equal(rangeSetsOverlap(
+        [
+            { fieldId: "year", minValue: 2018, maxValue: 2020 },
+            { fieldId: "mileage", minValue: 0, maxValue: 50000 },
+        ],
+        [
+            { fieldId: "year", minValue: 2019, maxValue: 2021 },
+            { fieldId: "mileage", minValue: 60000, maxValue: 90000 },
+        ],
+        rangeFields,
+    ), false);
+    assert.equal(rangeSetsOverlap(
+        [
+            { fieldId: "year", minValue: 2018, maxValue: 2020 },
+            { fieldId: "mileage", minValue: 0, maxValue: 50000 },
+        ],
+        [
+            { fieldId: "year", minValue: 2019, maxValue: 2021 },
+            { fieldId: "mileage", minValue: 40000, maxValue: 90000 },
+        ],
+        rangeFields,
+    ), true);
 });
 
 test("storefront search utilities return matching rows and cascading options", () => {
@@ -54,6 +103,9 @@ test("storefront search utilities return matching rows and cascading options", (
                     { key: "make", value: "Toyota" },
                     { key: "model", value: "Corolla" },
                 ],
+                rangeValues: [
+                    { key: "year", minValue: 2018, maxValue: 2021 },
+                ],
                 attachments: [{ id: "gid://shopify/Product/1" }],
             },
             {
@@ -65,13 +117,16 @@ test("storefront search utilities return matching rows and cascading options", (
                     { key: "make", value: "Toyota" },
                     { key: "model", value: "Camry" },
                 ],
+                rangeValues: [
+                    { key: "year", minValue: 2020, maxValue: 2023 },
+                ],
                 attachments: [{ id: "gid://shopify/Product/2" }],
             },
         ],
     };
 
     const matchingRows = getMatchingRows(config, {
-        year: 2020,
+        ranges: { year: 2020 },
         filters: { make: "Toyota", model: "Camry" },
     });
 
@@ -79,17 +134,18 @@ test("storefront search utilities return matching rows and cascading options", (
     assert.equal(matchingRows[0].id, "row-2");
 
     const availableOptions = getAvailableOptions(config, {
-        year: 2020,
+        ranges: { year: 2020 },
         filters: { make: "Toyota" },
     });
 
     assert.deepEqual(availableOptions, {
         make: ["Toyota"],
         model: ["Camry", "Corolla"],
+        year: [2023, 2022, 2021, 2020, 2019, 2018],
     });
 
     const results = getSearchResults(config, {
-        year: 2020,
+        ranges: { year: 2020 },
         filters: { make: "Toyota", model: "Corolla" },
     });
 

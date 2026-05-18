@@ -144,7 +144,7 @@ test("shop validation syncs existing shop data without replacing it with default
     }
 });
 
-test("field validation allows only one range field per shop", async () => {
+test("field validation gates range fields by the configured limit", async () => {
     const shopId = uniqueShopId();
 
     await prisma.shop.create({
@@ -182,8 +182,31 @@ test("field validation allows only one range field per shop", async () => {
                     rangeEnd: 2025,
                 },
             }),
-            /Only one range field is allowed per shop/,
+            /premium subscription/,
         );
+
+        await createField({
+            admin: null,
+            shopId,
+            rangeFieldLimit: 2,
+            field: {
+                type: "RANGE",
+                label: "Mileage",
+                visibility: "VISIBLE",
+                sortOrder: "A_Z",
+                rangeStart: 0,
+                rangeEnd: 10,
+            },
+        });
+
+        const rangeFieldCount = await prisma.field.count({
+            where: {
+                shopId,
+                type: "RANGE",
+            },
+        });
+
+        assert.equal(rangeFieldCount, 2);
     } finally {
         await prisma.shop.delete({
             where: {
@@ -193,7 +216,7 @@ test("field validation allows only one range field per shop", async () => {
     }
 });
 
-test("row creation persists data and rejects overlapping year ranges", async () => {
+test("row creation persists multiple range values and rejects full range overlaps", async () => {
     const shopId = uniqueShopId();
 
     await prisma.shop.create({
@@ -246,6 +269,21 @@ test("row creation persists data and rejects overlapping year ranges", async () 
             },
         });
 
+        const mileageField = await prisma.field.create({
+            data: {
+                shopId,
+                key: "mileage",
+                type: "RANGE",
+                label: "Mileage",
+                placeholder: "Select mileage",
+                visibility: "VISIBLE",
+                sortOrder: "A_Z",
+                rangeStart: 0,
+                rangeEnd: 10,
+                position: 3,
+            },
+        });
+
         const firstRow = await createRow({
             admin: null,
             data: {
@@ -255,6 +293,7 @@ test("row creation persists data and rejects overlapping year ranges", async () 
                     { fieldId: makeField.id, value: "Toyota" },
                     { fieldId: modelField.id, value: "Corolla" },
                     { fieldId: yearField.id, minValue: 2018, maxValue: 2020 },
+                    { fieldId: mileageField.id, minValue: 0, maxValue: 3 },
                 ]),
                 attachments: JSON.stringify([
                     { id: "gid://shopify/Product/111" },
@@ -269,6 +308,18 @@ test("row creation persists data and rejects overlapping year ranges", async () 
         assert.equal(rows[0].columns[makeField.id], "Toyota");
         assert.equal(rows[0].columns[modelField.id], "Corolla");
         assert.equal(rows[0].columns[yearField.id], "2018-2020");
+        assert.equal(rows[0].columns[mileageField.id], "0-3");
+
+        const storedRangeValues = await prisma.rowRangeValue.findMany({
+            where: {
+                rowId: firstRow.row.id,
+            },
+            orderBy: {
+                minValue: "asc",
+            },
+        });
+
+        assert.equal(storedRangeValues.length, 2);
 
         await assert.rejects(
             createRow({
@@ -280,19 +331,157 @@ test("row creation persists data and rejects overlapping year ranges", async () 
                         { fieldId: makeField.id, value: "Toyota" },
                         { fieldId: modelField.id, value: "Corolla" },
                         { fieldId: yearField.id, minValue: 2020, maxValue: 2022 },
+                        { fieldId: mileageField.id, minValue: 2, maxValue: 5 },
                     ]),
                     attachments: JSON.stringify([
                         { id: "gid://shopify/Product/222" },
                     ]),
                 },
             }),
-            /overlapping year range/i,
+            /overlapping range/i,
         );
+
+        const secondRow = await createRow({
+            admin: null,
+            data: {
+                shopId,
+                type: "PRODUCT",
+                fields: JSON.stringify([
+                    { fieldId: makeField.id, value: "Toyota" },
+                    { fieldId: modelField.id, value: "Corolla" },
+                    { fieldId: yearField.id, minValue: 2020, maxValue: 2022 },
+                    { fieldId: mileageField.id, minValue: 6, maxValue: 8 },
+                ]),
+                attachments: JSON.stringify([
+                    { id: "gid://shopify/Product/333" },
+                ]),
+            },
+        });
+
+        assert.equal(secondRow.success, true);
+
+        await deleteRow({
+            admin: null,
+            shopId,
+            rowId: secondRow.row.id,
+        });
 
         await deleteRow({
             admin: null,
             shopId,
             rowId: firstRow.row.id,
+        });
+
+        const rowsAfterDelete = await getRows({ shopId });
+        assert.equal(rowsAfterDelete.length, 0);
+    } finally {
+        await prisma.shop.delete({
+            where: {
+                shopifyGid: shopId,
+            },
+        });
+    }
+});
+
+test("adding a premium range field backfills existing rows", async () => {
+    const shopId = uniqueShopId();
+
+    await prisma.shop.create({
+        data: {
+            shopifyGid: shopId,
+            name: "Integration Test Shop",
+            domain: "https://example.test",
+        },
+    });
+
+    try {
+        const makeField = await prisma.field.create({
+            data: {
+                shopId,
+                key: "make",
+                type: "SELECT",
+                label: "Make",
+                placeholder: "Select make",
+                visibility: "VISIBLE",
+                sortOrder: "A_Z",
+                position: 0,
+            },
+        });
+
+        const yearField = await prisma.field.create({
+            data: {
+                shopId,
+                key: "year",
+                type: "RANGE",
+                label: "Year",
+                placeholder: "Select year",
+                visibility: "VISIBLE",
+                sortOrder: "A_Z",
+                rangeStart: 2010,
+                rangeEnd: 2030,
+                position: 1,
+            },
+        });
+
+        const createdRow = await createRow({
+            admin: null,
+            data: {
+                shopId,
+                type: "PRODUCT",
+                fields: JSON.stringify([
+                    { fieldId: makeField.id, value: "Toyota" },
+                    { fieldId: yearField.id, minValue: 2018, maxValue: 2020 },
+                ]),
+                attachments: JSON.stringify([
+                    { id: "gid://shopify/Product/111" },
+                ]),
+            },
+        });
+
+        await createField({
+            admin: null,
+            shopId,
+            rangeFieldLimit: 2,
+            field: {
+                type: "RANGE",
+                label: "Mileage",
+                visibility: "VISIBLE",
+                sortOrder: "A_Z",
+                rangeStart: 0,
+                rangeEnd: 10,
+            },
+        });
+
+        const mileageField = await prisma.field.findFirst({
+            where: {
+                shopId,
+                key: "mileage",
+            },
+        });
+        const backfilledRange = await prisma.rowRangeValue.findUnique({
+            where: {
+                rowId_fieldId: {
+                    rowId: createdRow.row.id,
+                    fieldId: mileageField.id,
+                },
+            },
+        });
+
+        assert.deepEqual(
+            {
+                minValue: backfilledRange.minValue,
+                maxValue: backfilledRange.maxValue,
+            },
+            {
+                minValue: 0,
+                maxValue: 10,
+            },
+        );
+
+        await deleteRow({
+            admin: null,
+            shopId,
+            rowId: createdRow.row.id,
         });
 
         const rowsAfterDelete = await getRows({ shopId });

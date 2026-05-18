@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 const cloneField = (template) => structuredClone(template);
 
 const getDefaultField = (type) => cloneField(type === "SELECT" ? Select : Range);
+const getInitialFieldType = ({ type, data }) => data?.type || (type === "edit" ? "RANGE" : "SELECT");
 
 const normalizeField = (rawField) => {
     if (!rawField) {
@@ -43,13 +44,24 @@ export default function FieldModal({
     data,
     handleUpdate,
     saveProgress,
-    loadingProgress
+    loadingProgress,
+    rangeFieldLimit = 1,
+    currentRangeFieldCount = 0
 }) {
-    const [fieldType, setFieldType] = useState(data?.type || "RANGE");
-    const [field, setField] = useState(() => (data ? normalizeField(data) : getDefaultField("RANGE")));
+    const [fieldType, setFieldType] = useState(() => getInitialFieldType({ type, data }));
+    const [field, setField] = useState(() => {
+        const initialFieldType = getInitialFieldType({ type, data });
+
+        return data ? normalizeField(data) : getDefaultField(initialFieldType);
+    });
+    const isAddingField = type === "add";
+    const isRangeAddDisabled = isAddingField && currentRangeFieldCount >= rangeFieldLimit;
+    const rangeAddLockedMessage = rangeFieldLimit <= 1
+        ? "Range fields are available with a premium subscription."
+        : `You can add up to ${rangeFieldLimit} range fields.`;
 
     useEffect(() => {
-        const nextFieldType = data?.type || "RANGE";
+        const nextFieldType = getInitialFieldType({ type, data });
         setFieldType(nextFieldType);
         setField(data ? normalizeField(data) : getDefaultField(nextFieldType));
     }, [data, type]);
@@ -68,6 +80,14 @@ export default function FieldModal({
     };
 
     const handleFieldTypeChange = (nextType) => {
+        if (isRangeAddDisabled && nextType === "RANGE") {
+            shopify.toast.show(rangeAddLockedMessage, {
+                isError: true,
+                duration: 4000,
+            });
+            return;
+        }
+
         setFieldType(nextType);
         setField((currentField) => {
             const nextField = getDefaultField(nextType);
@@ -83,6 +103,14 @@ export default function FieldModal({
     };
 
     const handleSave = () => {
+        if (isRangeAddDisabled && field?.type === "RANGE") {
+            shopify.toast.show(rangeAddLockedMessage, {
+                isError: true,
+                duration: 4000,
+            });
+            return;
+        }
+
         handleUpdate({ target: 'field', value: { type, data: field } });
     };
 
@@ -98,7 +126,9 @@ export default function FieldModal({
                         onChange={(e) => handleFieldTypeChange(e.target.value)}
                     >
                         <s-option value="SELECT">Select</s-option>
-                        <s-option value="RANGE">Range</s-option>
+                        <s-option value="RANGE" disabled={isRangeAddDisabled}>
+                            {isRangeAddDisabled ? "Range (Premium)" : "Range"}
+                        </s-option>
                     </s-select>
                     <s-grid gridTemplateColumns="2fr 1fr" gap="base" alignItems="center">
                         <s-select
